@@ -64,14 +64,34 @@ function authorize(req: Request): NextResponse | null {
   return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
 }
 
+/**
+ * Skip the upstream fetch if the store was updated within MIN_INTERVAL_MS.
+ * Cheap protection against client-poll storms hammering ESPN/SBD; the cron
+ * and explicit ?force=1 calls bypass this.
+ */
+const MIN_INTERVAL_MS = 60_000;
+
+async function maybeRefresh(req: Request) {
+  const url = new URL(req.url);
+  const force = url.searchParams.get("force") === "1" || !!req.headers.get("x-vercel-cron");
+  if (!force) {
+    const store = await readStore();
+    const ageMs = Date.now() - new Date(store.lastUpdated).getTime();
+    if (Number.isFinite(ageMs) && ageMs < MIN_INTERVAL_MS) {
+      return { ok: true, skipped: true, ageMs, count: store.games.length };
+    }
+  }
+  return runRefresh();
+}
+
 export async function POST(req: Request) {
   const denied = authorize(req);
   if (denied) return denied;
-  return NextResponse.json(await runRefresh());
+  return NextResponse.json(await maybeRefresh(req));
 }
 
 export async function GET(req: Request) {
   const denied = authorize(req);
   if (denied) return denied;
-  return NextResponse.json(await runRefresh());
+  return NextResponse.json(await maybeRefresh(req));
 }

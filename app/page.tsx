@@ -68,7 +68,11 @@ export default async function HomePage({
 
   return (
     <>
-      <AutoRefresh intervalMs={60_000} />
+      <AutoRefresh
+        intervalMs={60_000}
+        refreshDataMs={180_000}
+        staleAtMs={new Date(store.lastUpdated).getTime()}
+      />
       <section className="hero">
         <div className="container">
           <div className="eyebrow">
