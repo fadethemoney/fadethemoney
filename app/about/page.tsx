@@ -29,9 +29,9 @@ export default function AboutPage() {
         flips, Vegas is winning the bet right now.
       </Block>
 
-      <Block title="Streaks &amp; alerts">
-        Every completed game updates a rolling streak. When either side reaches a 2-game
-        run, the admin gets an email. Today&apos;s record is shown at the top of the dashboard.
+      <Block title="Streaks">
+        Every completed game updates a rolling streak. Today&apos;s record is shown
+        at the top of the dashboard.
       </Block>
 
       <Block title="Coverage">

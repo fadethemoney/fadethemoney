@@ -12,13 +12,7 @@ export const dynamic = "force-dynamic";
 
 const LEAGUES: League[] = ["nba", "mlb", "nfl", "nhl"];
 
-export async function POST(req: Request) {
-  const auth = req.headers.get("authorization") ?? "";
-  const token = process.env.REFRESH_TOKEN;
-  if (token && auth !== `Bearer ${token}`) {
-    return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
-  }
-
+async function runRefresh() {
   const all = [];
   for (const league of LEAGUES) {
     try {
@@ -57,9 +51,27 @@ export async function POST(req: Request) {
   }
   await setStreak(streak);
 
-  return NextResponse.json({ ok: true, count: all.length, streak });
+  return { ok: true, count: all.length, streak };
 }
 
-export async function GET() {
-  return NextResponse.json({ ok: true, hint: "POST to refresh" });
+function authorize(req: Request): NextResponse | null {
+  const token = process.env.REFRESH_TOKEN;
+  if (!token) return null; // unguarded in dev
+  const auth = req.headers.get("authorization") ?? "";
+  // Vercel cron sets a "x-vercel-cron" header on its GET pings; honor that too.
+  if (auth === `Bearer ${token}`) return null;
+  if (req.headers.get("x-vercel-cron")) return null;
+  return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
+}
+
+export async function POST(req: Request) {
+  const denied = authorize(req);
+  if (denied) return denied;
+  return NextResponse.json(await runRefresh());
+}
+
+export async function GET(req: Request) {
+  const denied = authorize(req);
+  if (denied) return denied;
+  return NextResponse.json(await runRefresh());
 }

@@ -245,12 +245,155 @@ header.site {
 /* Cards */
 .games-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
+  grid-template-columns: 1fr;
+  gap: 12px;
   padding-bottom: 32px;
 }
-@media (max-width: 900px) { .games-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 600px) { .games-grid { grid-template-columns: 1fr; } }
+
+/* Section wrapper holds tabs + header + cards */
+.games-section { margin-bottom: 28px; }
+
+/* Mobile market tab bar — hidden on desktop */
+.market-tabs {
+  display: none;
+  gap: 6px;
+  margin: 0 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px;
+  background: var(--surface);
+}
+.market-tab {
+  flex: 1;
+  background: transparent;
+  border: 0;
+  padding: 9px 10px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.market-tab.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* Tabular odds matrix: Matchup | ML | BET% | $% | Spread | BET% | $% | Total | BET% | $% */
+.odds-grid {
+  width: 100%;
+  font-size: 13px;
+}
+.odds-grid-head, .odds-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.6fr) repeat(9, minmax(64px, 1fr));
+  align-items: center;
+  padding: 10px 14px;
+  gap: 8px;
+}
+.odds-grid-head {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-bottom: 0;
+  background: var(--bg-section);
+  border-top-left-radius: 8px;
+  border-top-right-radius: 8px;
+}
+.odds-grid-head .oh-team { text-align: left; }
+.odds-grid-head .oh-col { text-align: center; }
+
+/* When section header is rendered, the per-card header is redundant */
+.games-section .card .card-header { display: none; }
+.games-section .games-grid { gap: 0; padding-bottom: 0; }
+.games-section .card {
+  border-radius: 0;
+  border-top: 0;
+}
+.games-section .card:last-child {
+  border-bottom-left-radius: 8px;
+  border-bottom-right-radius: 8px;
+}
+
+.odds-row {
+  border-top: 1px solid #F5F4EF;
+}
+.odds-row:first-of-type { border-top: 0; }
+.odds-row.is-public { background: var(--accent-surface); }
+
+.or-team {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.or-team .team-abbr { width: 36px; flex-shrink: 0; }
+.or-team .team-name {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.or-team .team-score {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  color: var(--text-muted);
+  margin-left: 4px;
+}
+
+.or-line {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  text-align: center;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 6px 4px;
+}
+.or-pct {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  text-align: center;
+  color: var(--text-secondary);
+}
+.or-pct.dollar { color: var(--text); font-weight: 500; }
+.or-pct.heavy { color: var(--text); font-weight: 600; }
+.heavy-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #16a34a;
+  margin-right: 5px;
+  vertical-align: middle;
+}
+
+@media (max-width: 720px) {
+  .market-tabs { display: flex; }
+  .odds-grid { font-size: 13px; }
+  .odds-grid-head, .odds-row {
+    grid-template-columns: minmax(120px, 1.4fr) minmax(64px, 1fr) minmax(56px, 1fr) minmax(56px, 1fr);
+    padding: 10px 12px;
+    gap: 6px;
+  }
+  /* Hide market columns that aren't active */
+  .games-section[data-market="ml"] [data-market="spread"],
+  .games-section[data-market="ml"] [data-market="total"] { display: none; }
+  .games-section[data-market="spread"] [data-market="ml"],
+  .games-section[data-market="spread"] [data-market="total"] { display: none; }
+  .games-section[data-market="total"] [data-market="ml"],
+  .games-section[data-market="total"] [data-market="spread"] { display: none; }
+
+  .or-team .team-name {
+    font-size: 13px;
+  }
+  .card-footer { padding: 10px 12px; font-size: 12px; }
+}
 
 .card {
   background: var(--surface);
@@ -494,3 +637,28 @@ footer.site { padding: 32px 0; background: var(--bg-footer); }
 .disclaimer strong { color: var(--gambler-red); font-weight: 500; }
 .footer-links a { color: var(--text-secondary); text-decoration: none; margin-right: 18px; }
 .footer-links a:hover { color: var(--text); }
+
+/* ----- Mobile overrides ----- */
+@media (max-width: 720px) {
+  .container { padding: 0 18px; }
+  .nav-inner { padding: 14px 0; gap: 12px; }
+  .logo-name { font-size: 17px; white-space: nowrap; }
+  .nav-links { gap: 14px; font-size: 13px; }
+
+  .hero { padding: 40px 0 32px; }
+  .hero h1 { font-size: 36px; line-height: 1.08; }
+  .hero .lede { font-size: 15px; }
+
+  .signup-inline { gap: 8px; }
+  .input { min-width: 0; width: 100%; flex-basis: 100%; }
+  .btn-primary { width: 100%; }
+
+  .editorial { padding: 48px 0; }
+  .section-title { font-size: 28px !important; }
+  .thesis-row { grid-template-columns: 36px 1fr; gap: 14px; padding: 18px 0; }
+  .thesis-body { font-size: 15px; }
+
+  .final-cta { padding: 48px 0; }
+  .final-cta h2 { font-size: 26px; }
+}
+

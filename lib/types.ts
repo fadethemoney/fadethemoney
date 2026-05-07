@@ -28,6 +28,12 @@ export interface BettingTrend {
   moneyPctHome: number;
   moneyPctAway: number;
 
+  // MONEYLINE odds & ticket-count splits (full picture per side).
+  mlOddsHome: string | null;   // e.g. "-150"
+  mlOddsAway: string | null;   // e.g. "+125"
+  mlBetPctHome: number;        // % of moneyline tickets on home
+  mlBetPctAway: number;
+
   // Same numbers from the SPREAD market, kept for completeness/debug.
   // (% of dollars wagered on each side of the spread.)
   spreadMoneyPctHome: number;
@@ -35,10 +41,14 @@ export interface BettingTrend {
 
   pickedSide: Side;        // public side (majority of spread bets)
 
-  // Total / Over-Under public side (spread bet %, total stake %)
+  // Total / Over-Under — splits per side.
   totalSide: TotalSide | null;
-  totalPublicPct: number;  // % of total bets on the public total side
-  totalMoneyPct: number;   // % of money on the public total side (from total market)
+  totalPublicPct: number;       // bet % on public total side (back-compat)
+  totalMoneyPct: number;        // money % on public total side (back-compat)
+  totalOverBetPct: number;
+  totalUnderBetPct: number;
+  totalOverMoneyPct: number;
+  totalUnderMoneyPct: number;
 
   // Optional line-movement context (captured, not surfaced in UI yet)
   openingSpread?: number;

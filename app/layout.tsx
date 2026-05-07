@@ -6,7 +6,7 @@ import { SiteFooter } from "@/components/SiteFooter";
 export const metadata: Metadata = {
   title: "Fade The Money — When the Public is Wrong, We Track It",
   description:
-    "Live sports betting dashboard tracking whether the public or Vegas is winning. Public streaks, live scores, email alerts.",
+    "Live sports betting dashboard tracking whether the public or Vegas is winning. Public streaks and live scores.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

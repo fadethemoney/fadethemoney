@@ -1,14 +1,28 @@
 import { readStore } from "@/lib/storage";
 import { todayKey } from "@/lib/calc";
 import { etDateKeyOf } from "@/lib/time";
-import { GameCard } from "@/components/GameCard";
+import { GamesSection } from "@/components/GamesSection";
+import { AutoRefresh } from "@/components/AutoRefresh";
 import { StreakBanner } from "@/components/StreakBanner";
 import { LeagueFilter } from "@/components/LeagueFilter";
-import { EmailSignup } from "@/components/EmailSignup";
 import type { Game } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+
+const LEAGUE_LABEL: Record<string, string> = {
+  nba: "NBA",
+  mlb: "MLB",
+  nfl: "NFL",
+  nhl: "NHL",
+};
+
+function emptyMessage(league: string | undefined, totalGames: number): React.ReactNode {
+  if (league && totalGames > 0) {
+    return `No ${LEAGUE_LABEL[league] ?? league.toUpperCase()} games today — likely offseason or an off-day for the league. Try another tab.`;
+  }
+  return <>No games loaded yet. Run <code>npm run update-data</code> to fetch.</>;
+}
 
 function eyebrowText(streak: { current: "public" | "vegas" | null; count: number }) {
   if (!streak.current || streak.count === 0) {
@@ -16,6 +30,13 @@ function eyebrowText(streak: { current: "public" | "vegas" | null; count: number
   }
   const who = streak.current === "public" ? "Public" : "Vegas";
   return `Live · ${who} on a ${streak.count}-game run`;
+}
+
+function nextDayKey(key: string): string {
+  const [y, m, d] = key.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() + 1);
+  return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}-${String(dt.getUTCDate()).padStart(2, "0")}`;
 }
 
 function group(games: Game[]) {
@@ -34,12 +55,20 @@ export default async function HomePage({
   const { league } = await searchParams;
   const store = await readStore();
   const today = todayKey();
-  const todays = store.games.filter((g) => etDateKeyOf(g.startTime) === today);
-  const filtered = league ? todays.filter((g) => g.league === league) : todays;
-  const groups = group(filtered);
+  const tomorrow = nextDayKey(today);
+  const inWindow = store.games.filter((g) => {
+    const k = etDateKeyOf(g.startTime);
+    return k === today || k === tomorrow;
+  });
+  const filtered = league ? inWindow.filter((g) => g.league === league) : inWindow;
+  const todays = filtered.filter((g) => etDateKeyOf(g.startTime) === today);
+  const tomorrows = filtered.filter((g) => etDateKeyOf(g.startTime) === tomorrow);
+  const groups = group(todays);
+  const tomorrowUpcoming = tomorrows.filter((g) => g.status === "scheduled");
 
   return (
     <>
+      <AutoRefresh intervalMs={60_000} />
       <section className="hero">
         <div className="container">
           <div className="eyebrow">
@@ -53,12 +82,10 @@ export default async function HomePage({
           </h1>
           <p className="lede">
             For every game across the major US leagues, we capture what the public bet,
-            then check whether they actually won. Public streaks, live scores, email
-            alerts when the streak hits two. Free.
+            then check whether they actually won. Public streaks and live scores. Free.
           </p>
-          <EmailSignup />
           <div className="secondary-link">
-            or <a href="#games">scroll for live games ↓</a>
+            <a href="#games">Scroll for live games ↓</a>
           </div>
         </div>
       </section>
@@ -68,26 +95,35 @@ export default async function HomePage({
         <LeagueFilter active={league} />
 
         {groups.live.length > 0 && (
-          <Section label={`Live · ${groups.live.length} game${groups.live.length === 1 ? "" : "s"}`}>
-            {groups.live.map((g) => <GameCard key={g.id} game={g} />)}
-          </Section>
+          <GamesSection
+            label={`Live · ${groups.live.length} game${groups.live.length === 1 ? "" : "s"}`}
+            games={groups.live}
+          />
         )}
         {groups.upcoming.length > 0 && (
-          <Section label={`Upcoming · ${groups.upcoming.length} game${groups.upcoming.length === 1 ? "" : "s"}`}>
-            {groups.upcoming.map((g) => <GameCard key={g.id} game={g} />)}
-          </Section>
+          <GamesSection
+            label={`Upcoming · ${groups.upcoming.length} game${groups.upcoming.length === 1 ? "" : "s"}`}
+            games={groups.upcoming}
+          />
         )}
         {groups.finals.length > 0 && (
-          <Section label={`Final · ${groups.finals.length} game${groups.finals.length === 1 ? "" : "s"}`}>
-            {groups.finals.map((g) => <GameCard key={g.id} game={g} />)}
-          </Section>
+          <GamesSection
+            label={`Final · ${groups.finals.length} game${groups.finals.length === 1 ? "" : "s"}`}
+            games={groups.finals}
+          />
+        )}
+        {tomorrowUpcoming.length > 0 && (
+          <GamesSection
+            label={`Tomorrow · ${tomorrowUpcoming.length} game${tomorrowUpcoming.length === 1 ? "" : "s"}`}
+            games={tomorrowUpcoming}
+          />
         )}
 
         {filtered.length === 0 && (
           <>
             <div className="section-label">Today</div>
             <div className="empty-state">
-              No games loaded yet. Run <code>npm run update-data</code> to fetch.
+              {emptyMessage(league, store.games.length)}
             </div>
           </>
         )}
@@ -131,7 +167,6 @@ export default async function HomePage({
               <CompareRow label="Live public %" yes />
               <CompareRow label="Data after game ends" />
               <CompareRow label="Public streak counter" />
-              <CompareRow label="Email alerts" />
               <CompareRow label="7-day history" />
             </div>
             <div className="compare-card ours">
@@ -139,31 +174,12 @@ export default async function HomePage({
               <CompareRow label="Live public %" yes />
               <CompareRow label="Data after game ends" yes />
               <CompareRow label="Public streak counter" yes />
-              <CompareRow label="Email alerts" yes />
               <CompareRow label="7-day history" yes />
             </div>
           </div>
         </div>
       </section>
 
-      <section className="final-cta" id="alerts">
-        <div className="container">
-          <h2 className="serif">
-            Get notified the moment a streak <em>hits two.</em>
-          </h2>
-          <p className="final-sub">One email per streak. No spam, no picks, no upsells.</p>
-          <EmailSignup ctaLabel="Get alerts" />
-        </div>
-      </section>
-    </>
-  );
-}
-
-function Section({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <>
-      <div className="section-label">{label}</div>
-      <div className="games-grid">{children}</div>
     </>
   );
 }

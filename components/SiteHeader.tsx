@@ -13,7 +13,6 @@ export function SiteHeader() {
             <Link href="/">Dashboard</Link>
             <Link href="/results">Results</Link>
             <Link href="/about">About</Link>
-            <Link href="/#alerts" className="nav-cta">Get alerts</Link>
           </div>
         </nav>
       </div>

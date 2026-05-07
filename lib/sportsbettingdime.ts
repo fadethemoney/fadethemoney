@@ -48,6 +48,7 @@ interface SbdEvent {
   markets?: {
     spread?: { books: Array<{ home?: { spread?: string }; away?: { spread?: string } }> };
     total?: { books: Array<{ total?: string | number; opening_total?: string | number }> };
+    moneyline?: { books: Array<{ home?: { odds?: string }; away?: { odds?: string } }> };
   };
   bettingSplits?: {
     updated?: string;
@@ -121,17 +122,39 @@ function toMatchup(ev: SbdEvent): ScrapedMatchup | null {
   const ml = splits.moneyline;
   const moneyPctHome = ml ? ml.home.stakePercentage : spreadMoneyPctHome;
   const moneyPctAway = ml ? ml.away.stakePercentage : spreadMoneyPctAway;
+  const mlBetPctHome = ml ? ml.home.betsPercentage : publicPctHome;
+  const mlBetPctAway = ml ? ml.away.betsPercentage : publicPctAway;
+
+  // Moneyline odds — pull "best" book or first available per side.
+  const mlBooks = ev.markets?.moneyline?.books ?? [];
+  const firstOdds = (k: "home" | "away"): string | null => {
+    for (const b of mlBooks) {
+      const o = b[k]?.odds;
+      if (o && o.trim() !== "") return o;
+    }
+    return null;
+  };
+  const mlOddsHome = firstOdds("home");
+  const mlOddsAway = firstOdds("away");
 
   // Total splits (may be absent for a particular game)
   let totalSide: TotalSide | null = null;
   let totalPublicPct = 0;
   let totalMoneyPct = 0;
+  let totalOverBetPct = 0;
+  let totalUnderBetPct = 0;
+  let totalOverMoneyPct = 0;
+  let totalUnderMoneyPct = 0;
   if (splits.total) {
     const over = splits.total.over;
     const under = splits.total.under;
     totalSide = over.betsPercentage >= under.betsPercentage ? "over" : "under";
     totalPublicPct = totalSide === "over" ? over.betsPercentage : under.betsPercentage;
     totalMoneyPct = totalSide === "over" ? over.stakePercentage : under.stakePercentage;
+    totalOverBetPct = over.betsPercentage;
+    totalUnderBetPct = under.betsPercentage;
+    totalOverMoneyPct = over.stakePercentage;
+    totalUnderMoneyPct = under.stakePercentage;
   }
 
   const trendUpdatedAt =
@@ -144,12 +167,20 @@ function toMatchup(ev: SbdEvent): ScrapedMatchup | null {
     publicPctAway: round1(publicPctAway),
     moneyPctHome: round1(moneyPctHome),
     moneyPctAway: round1(moneyPctAway),
+    mlOddsHome,
+    mlOddsAway,
+    mlBetPctHome: round1(mlBetPctHome),
+    mlBetPctAway: round1(mlBetPctAway),
     spreadMoneyPctHome: round1(spreadMoneyPctHome),
     spreadMoneyPctAway: round1(spreadMoneyPctAway),
     pickedSide,
     totalSide,
     totalPublicPct: round1(totalPublicPct),
     totalMoneyPct: round1(totalMoneyPct),
+    totalOverBetPct: round1(totalOverBetPct),
+    totalUnderBetPct: round1(totalUnderBetPct),
+    totalOverMoneyPct: round1(totalOverMoneyPct),
+    totalUnderMoneyPct: round1(totalUnderMoneyPct),
     openingSpread: openingSpread !== null ? roundHalf(openingSpread) : undefined,
     openingTotal: openingTotal !== null ? roundHalf(openingTotal) : undefined,
     source: "sbd",
