@@ -43,10 +43,14 @@ async function runRefresh() {
   }
   streak.history = streak.history.slice(0, 50);
   if (streak.count >= 2 && streak.count > streak.lastNotifiedCount) {
-    await notifyAdmin({
-      subject: `Fade The Money — ${streak.current} on a ${streak.count}-game streak`,
-      text: `${streak.current} has won ${streak.count} bets in a row.`,
-    });
+    try {
+      await notifyAdmin({
+        subject: `Fade The Money — ${streak.current} on a ${streak.count}-game streak`,
+        text: `${streak.current} has won ${streak.count} bets in a row.`,
+      });
+    } catch (e) {
+      console.warn("[refresh] notifyAdmin failed:", (e as Error).message);
+    }
     streak.lastNotifiedCount = streak.count;
   }
   await setStreak(streak);
@@ -84,14 +88,25 @@ async function maybeRefresh(req: Request) {
   return runRefresh();
 }
 
-export async function POST(req: Request) {
+async function handle(req: Request) {
   const denied = authorize(req);
   if (denied) return denied;
-  return NextResponse.json(await maybeRefresh(req));
+  try {
+    return NextResponse.json(await maybeRefresh(req));
+  } catch (e) {
+    const err = e as Error;
+    console.error("[refresh] failed:", err.stack ?? err.message);
+    return NextResponse.json(
+      {
+        ok: false,
+        error: err.message,
+        hint:
+          "If this mentions BLOB_READ_WRITE_TOKEN or 'put is not a function', set up Vercel Blob and redeploy.",
+      },
+      { status: 500 },
+    );
+  }
 }
 
-export async function GET(req: Request) {
-  const denied = authorize(req);
-  if (denied) return denied;
-  return NextResponse.json(await maybeRefresh(req));
-}
+export async function POST(req: Request) { return handle(req); }
+export async function GET(req: Request) { return handle(req); }
