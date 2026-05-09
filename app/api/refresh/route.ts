@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import { fetchEspnScoreboard } from "@/lib/espn";
 import { scrapeLeagueTrends } from "@/lib/sportsbettingdime";
-import { mergeTrends } from "@/lib/merge";
-import { upsertGames, recordDaily, setStreak, readStore } from "@/lib/storage";
+import { mergeTrends, attachFinalResult } from "@/lib/merge";
+import { upsertGames, recordDaily, setStreak, setTotalsStreak, readStore, writeStore } from "@/lib/storage";
 import { summarizeDay, todayKey } from "@/lib/calc";
 import { etDateKeyOf } from "@/lib/time";
 import { notifyAdmin } from "@/lib/mailer";
-import type { League, StreakState } from "@/lib/types";
+import type { League, StreakState, TotalsStreakState, Game } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +24,29 @@ async function runRefresh() {
     }
   }
   await upsertGames(all);
+
+  // Backfill finalResult on any stored final that has a trend but is missing
+  // it (older data from before the merge.ts fix). Then re-summarize history
+  // so the results page reflects the corrected counts.
+  const store0 = await readStore();
+  let backfilled = false;
+  store0.games = store0.games.map((g) => {
+    if (g.status === "final" && g.trend && !g.finalResult) {
+      backfilled = true;
+      return attachFinalResult(g);
+    }
+    return g;
+  });
+  if (backfilled) {
+    for (const day of store0.history) {
+      const dayGames = store0.games.filter((g) => day.games.includes(g.id));
+      const s = summarizeDay(dayGames);
+      day.publicWins = s.publicWins;
+      day.vegasWins = s.vegasWins;
+      day.pushes = s.pushes;
+    }
+    await writeStore(store0);
+  }
 
   const today = todayKey();
   const todays = all.filter((g) => etDateKeyOf(g.startTime) === today);
@@ -55,7 +78,44 @@ async function runRefresh() {
   }
   await setStreak(streak);
 
-  return { ok: true, count: all.length, streak };
+  // ---- Totals (over/under) streak ----
+  const totalsStreak: TotalsStreakState = store.totalsStreak ?? {
+    current: null,
+    count: 0,
+    lastNotifiedCount: 0,
+    history: [],
+  };
+  const finalsForTotals = todays.filter(
+    (g): g is Game & { trend: NonNullable<Game["trend"]>; finalResult: NonNullable<Game["finalResult"]> } =>
+      g.status === "final" && !!g.finalResult && !!g.trend && !!g.trend.totalSide,
+  );
+  for (const g of finalsForTotals) {
+    const went = g.finalResult.totalGoOver; // true=over, false=under, null=push
+    if (went === null) continue;
+    const publicSide = g.trend.totalSide; // "over" | "under"
+    const publicHit = (publicSide === "over" && went) || (publicSide === "under" && !went);
+    const winner: "public" | "vegas" = publicHit ? "public" : "vegas";
+    const key = `${today}:${g.id}`;
+    if (totalsStreak.history.find((h) => h.date === key)) continue;
+    if (totalsStreak.current === winner) totalsStreak.count += 1;
+    else { totalsStreak.current = winner; totalsStreak.count = 1; totalsStreak.lastNotifiedCount = 0; }
+    totalsStreak.history.unshift({ date: key, winner });
+  }
+  totalsStreak.history = totalsStreak.history.slice(0, 50);
+  if (totalsStreak.count >= 2 && totalsStreak.count > totalsStreak.lastNotifiedCount) {
+    try {
+      await notifyAdmin({
+        subject: `Fade The Money — Totals · ${totalsStreak.current} on a ${totalsStreak.count}-game O/U streak`,
+        text: `${totalsStreak.current} has won ${totalsStreak.count} over/under bets in a row.`,
+      });
+    } catch (e) {
+      console.warn("[refresh] totals notifyAdmin failed:", (e as Error).message);
+    }
+    totalsStreak.lastNotifiedCount = totalsStreak.count;
+  }
+  await setTotalsStreak(totalsStreak);
+
+  return { ok: true, count: all.length, streak, totalsStreak };
 }
 
 function authorize(req: Request): NextResponse | null {

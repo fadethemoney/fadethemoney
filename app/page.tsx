@@ -66,6 +66,23 @@ export default async function HomePage({
   const groups = group(todays);
   const tomorrowUpcoming = tomorrows.filter((g) => g.status === "scheduled");
 
+  // Fallback: if today + tomorrow are both empty, surface the next upcoming
+  // games so the page never looks blank between schedule days.
+  const nothingInWindow =
+    groups.live.length === 0 &&
+    groups.upcoming.length === 0 &&
+    groups.finals.length === 0 &&
+    tomorrowUpcoming.length === 0;
+  const upcomingPool = league
+    ? store.games.filter((g) => g.league === league)
+    : store.games;
+  const upcomingFallback = nothingInWindow
+    ? upcomingPool
+        .filter((g) => g.status === "scheduled" && new Date(g.startTime).getTime() > Date.now())
+        .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
+        .slice(0, 12)
+    : [];
+
   return (
     <>
       <AutoRefresh
@@ -123,7 +140,14 @@ export default async function HomePage({
           />
         )}
 
-        {filtered.length === 0 && (
+        {upcomingFallback.length > 0 && (
+          <GamesSection
+            label={`Next up · ${upcomingFallback.length} game${upcomingFallback.length === 1 ? "" : "s"}`}
+            games={upcomingFallback}
+          />
+        )}
+
+        {filtered.length === 0 && upcomingFallback.length === 0 && (
           <>
             <div className="section-label">Today</div>
             <div className="empty-state">

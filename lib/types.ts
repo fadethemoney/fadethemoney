@@ -92,9 +92,17 @@ export interface DailyRecord {
   games: string[];         // game ids
 }
 
+export interface TotalsStreakState {
+  current: "public" | "vegas" | null;
+  count: number;
+  lastNotifiedCount: number;
+  history: { date: string; winner: "public" | "vegas" }[];
+}
+
 export interface DataStore {
   games: Game[];
   history: DailyRecord[];
-  streak: StreakState;
+  streak: StreakState;            // spread (ATS) streak
+  totalsStreak?: TotalsStreakState; // over/under streak (optional for back-compat)
   lastUpdated: string;
 }
