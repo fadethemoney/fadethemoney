@@ -23,7 +23,7 @@ import type { DataStore, Game, DailyRecord, StreakState } from "./types";
 const DATA_DIR = path.join(process.cwd(), "data");
 const STORE_PATH = path.join(DATA_DIR, "store.json");
 const BLOB_KEY = "store.json";
-const CACHE_TTL_MS = 30_000;
+const CACHE_TTL_MS = 5_000;
 
 const EMPTY: DataStore = {
   games: [],
