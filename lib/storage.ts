@@ -149,9 +149,13 @@ export async function setStreak(streak: StreakState): Promise<void> {
   await writeStore(store);
 }
 
-/** Bypass cache for read-modify-write paths so we don't write back stale state. */
+/**
+ * Read-modify-write helper. Trusts the in-process cache so we read the state
+ * we just wrote earlier in the same request — Vercel Blob has read-after-write
+ * latency, and bypassing the cache here caused subsequent writes to clobber
+ * fresh data with the pre-write blob snapshot.
+ */
 async function readStoreFresh(): Promise<DataStore> {
-  bustCache();
   return readStore();
 }
 
