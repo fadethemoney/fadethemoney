@@ -79,7 +79,15 @@ export function GameCard({ game }: { game: Game }) {
       )}
 
       <div className="card-footer">
-        <span>{t ? `Fav: ${favSide === "home" ? game.home.abbr : game.away.abbr} ${fmtSpread(favSide === "home" ? t.spread : -t.spread)}` : "—"}</span>
+        <span>
+          <span className="game-time">{timeLabel(game)}</span>
+          {t && (
+            <>
+              {" · "}Fav: {favSide === "home" ? game.home.abbr : game.away.abbr}{" "}
+              {fmtSpread(favSide === "home" ? t.spread : -t.spread)}
+            </>
+          )}
+        </span>
         <ResultPill game={game} covering={covering} />
       </div>
 
