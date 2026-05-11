@@ -26,10 +26,10 @@ function emptyMessage(league: string | undefined, totalGames: number): React.Rea
 
 function eyebrowText(streak: { current: "public" | "vegas" | null; count: number }) {
   if (!streak.current || streak.count === 0) {
-    return "Live · Tracking public vs Vegas across NBA, MLB, NFL, NHL";
+    return "Live · Tracking favorites vs underdogs across NBA, MLB, NFL, NHL";
   }
-  const who = streak.current === "public" ? "Public" : "Vegas";
-  return `Live · ${who} on a ${streak.count}-game run`;
+  const who = streak.current === "public" ? "Favorites" : "Underdogs";
+  return `Live · ${who} on a ${streak.count}-game ATS run`;
 }
 
 function nextDayKey(key: string): string {
@@ -97,13 +97,12 @@ export default async function HomePage({
             {eyebrowText(store.streak)}
           </div>
           <h1 className="serif">
-            The public is wrong<br />
-            more than they&apos;re right.<br />
-            <em>We track when.</em>
+            Favorites don&apos;t always cover.<br />
+            <em>We track when they don&apos;t.</em>
           </h1>
           <p className="lede">
-            For every game across the major US leagues, we capture what the public bet,
-            then check whether they actually won. Public streaks and live scores. Free.
+            Live odds, spreads, totals, and ATS results for every game across the major
+            US leagues. Favorite-vs-underdog streaks updated in real time. Free.
           </p>
           <div className="secondary-link">
             <a href="#games">Scroll for live games ↓</a>
@@ -159,24 +158,23 @@ export default async function HomePage({
 
       <section className="editorial">
         <div className="container">
-          <div className="section-h">How fading works</div>
+          <div className="section-h">How the spread plays out</div>
           <h2 className="section-title serif">
-            Three steps the books bank on,<br />
-            <em>game after game.</em>
+            The line is the question.<br />
+            <em>The cover is the answer.</em>
           </h2>
 
-          <Thesis n="01" title="The public piles in">
-            When 70%+ of bets land on one side, that&apos;s &ldquo;public action&rdquo; — usually
-            the favorite, or the over. People bet with their hearts, hometowns,
-            and highlight reels.
+          <Thesis n="01" title="The line gets set">
+            Books open a spread and a total. The favorite gives points;
+            the underdog takes them. The total is the over/under on combined score.
           </Thesis>
-          <Thesis n="02" title="Vegas adjusts the line">
-            Books shade the spread to balance the action. The public still bets
-            the same obvious side. The line keeps moving against them.
+          <Thesis n="02" title="The game plays out">
+            The favorite has to win by more than the spread to cover.
+            The underdog covers by losing close — or just winning outright.
           </Thesis>
-          <Thesis n="03" title="The fade wins long-term">
-            Public bettors win <strong>~47%</strong> of spread bets — well below
-            the <strong>52.4%</strong> break-even. That gap is where the fade lives.
+          <Thesis n="03" title="We tally the run">
+            We track which side covered every game, every day,
+            and surface streaks the moment they form.
           </Thesis>
         </div>
       </section>
@@ -185,23 +183,23 @@ export default async function HomePage({
         <div className="container">
           <div className="section-h">What&apos;s different</div>
           <h2 className="section-title serif">
-            Most sites show the public %.<br />
-            <em>We show whether they won.</em>
+            Lines on every site.<br />
+            <em>Results in one place.</em>
           </h2>
 
           <div className="compare">
             <div className="compare-card">
-              <div className="compare-name">Covers · Action</div>
-              <CompareRow label="Live public %" yes />
-              <CompareRow label="Data after game ends" />
-              <CompareRow label="Public streak counter" />
+              <div className="compare-name">Most odds sites</div>
+              <CompareRow label="Live odds & spreads" yes />
+              <CompareRow label="Cover results after each game" />
+              <CompareRow label="Favorite/underdog streak counter" />
               <CompareRow label="7-day history" />
             </div>
             <div className="compare-card ours">
               <div className="compare-name">Fade The Money</div>
-              <CompareRow label="Live public %" yes />
-              <CompareRow label="Data after game ends" yes />
-              <CompareRow label="Public streak counter" yes />
+              <CompareRow label="Live odds & spreads" yes />
+              <CompareRow label="Cover results after each game" yes />
+              <CompareRow label="Favorite/underdog streak counter" yes />
               <CompareRow label="7-day history" yes />
             </div>
           </div>

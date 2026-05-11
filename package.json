@@ -8,13 +8,10 @@
     "start": "next start",
     "lint": "next lint",
     "update-data": "tsx scripts/update.ts",
-    "scrape": "tsx scripts/scrape.ts",
-    "seed-trends": "tsx scripts/seed-trends.ts",
     "test-alert": "tsx scripts/test-alert.ts"
   },
   "dependencies": {
     "@vercel/blob": "^2.3.3",
-    "cheerio": "^1.0.0",
     "next": "15.5.9",
     "nodemailer": "^6.9.16",
     "react": "^19.0.0",

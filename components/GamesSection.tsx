@@ -29,14 +29,10 @@ export function GamesSection({ label, games }: { label: string; games: Game[] })
       <div className="odds-grid-head">
         <span className="oh-team">Matchup</span>
         <span className="oh-col" data-market="ml">Moneyline</span>
-        <span className="oh-col" data-market="ml">BET%</span>
-        <span className="oh-col" data-market="ml">$%</span>
         <span className="oh-col" data-market="spread">Spread</span>
-        <span className="oh-col" data-market="spread">BET%</span>
-        <span className="oh-col" data-market="spread">$%</span>
+        <span className="oh-col" data-market="spread">Odds</span>
         <span className="oh-col" data-market="total">Total</span>
-        <span className="oh-col" data-market="total">BET%</span>
-        <span className="oh-col" data-market="total">$%</span>
+        <span className="oh-col" data-market="total">Odds</span>
       </div>
 
       <div className="games-grid">

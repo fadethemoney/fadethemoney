@@ -1,6 +1,18 @@
-import { fetchEspnScoreboard } from "../lib/espn";
-import { scrapeLeagueTrends } from "../lib/sportsbettingdime";
-import { mergeTrends } from "../lib/merge";
+import { readFileSync } from "fs";
+import { join } from "path";
+
+// Load .env.local (Next.js does this at runtime; tsx scripts don't).
+try {
+  const raw = readFileSync(join(process.cwd(), ".env.local"), "utf8");
+  for (const line of raw.split(/\r?\n/)) {
+    const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/i);
+    if (!m) continue;
+    if (process.env[m[1]] === undefined) process.env[m[1]] = m[2].replace(/^['"]|['"]$/g, "");
+  }
+} catch {}
+
+import { fetchAllGames } from "../lib/sportsgameodds";
+import { finalizeGames } from "../lib/merge";
 import { readStore, upsertGames, recordDaily, setStreak } from "../lib/storage";
 import { summarizeDay, todayKey } from "../lib/calc";
 import { etDateKeyOf } from "../lib/time";
@@ -9,40 +21,21 @@ import type { League, StreakState } from "../lib/types";
 
 const LEAGUES: League[] = ["nba", "mlb", "nfl", "nhl"];
 
-async function safeScrape(league: League) {
-  try {
-    return await scrapeLeagueTrends(league);
-  } catch (err) {
-    console.warn(`[scrape] ${league} failed:`, (err as Error).message);
-    return [];
-  }
-}
-
 async function run() {
-  const allGames = [];
-  for (const league of LEAGUES) {
-    try {
-      const espn = await fetchEspnScoreboard(league);
-      const trends = await safeScrape(league);
-      const merged = mergeTrends(espn, trends);
-      allGames.push(...merged);
-      console.log(`[update] ${league}: ${merged.length} games`);
-    } catch (err) {
-      console.warn(`[update] ${league} failed:`, (err as Error).message);
-    }
-  }
+  const fetched = await fetchAllGames(LEAGUES);
+  const all = finalizeGames(fetched);
+  console.log(`[update] fetched ${all.length} games across ${LEAGUES.length} leagues`);
 
-  await upsertGames(allGames);
+  await upsertGames(all);
 
   const today = todayKey();
-  const todays = allGames.filter((g) => etDateKeyOf(g.startTime) === today);
+  const todays = all.filter((g) => etDateKeyOf(g.startTime) === today);
   const summary = summarizeDay(todays);
   await recordDaily(today, { ...summary, games: todays.map((g) => g.id) });
 
-  // Update streak based on completed games today
   const store = await readStore();
   const finals = todays.filter((g) => g.status === "final" && g.finalResult);
-  let streak: StreakState = { ...store.streak };
+  const streak: StreakState = { ...store.streak };
   for (const g of finals) {
     if (streak.history.find((h) => h.date === `${today}:${g.id}`)) continue;
     const c = g.finalResult!.publicCovered;
@@ -61,14 +54,14 @@ async function run() {
   if (streak.count >= 2 && streak.count > streak.lastNotifiedCount) {
     await notifyAdmin({
       subject: `Fade The Money — ${streak.current} on a ${streak.count}-game streak`,
-      text: `${streak.current?.toUpperCase()} has won ${streak.count} bets in a row. Check the dashboard.`,
+      text: `${streak.current?.toUpperCase()} has won ${streak.count} bets in a row.`,
     });
     streak.lastNotifiedCount = streak.count;
   }
   await setStreak(streak);
 
   console.log("[update] done", {
-    games: allGames.length,
+    games: all.length,
     streak: `${streak.current ?? "—"} x${streak.count}`,
   });
 }

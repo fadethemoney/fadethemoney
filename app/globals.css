@@ -287,7 +287,7 @@ header.site {
 }
 .odds-grid-head, .odds-row {
   display: grid;
-  grid-template-columns: minmax(180px, 1.6fr) repeat(9, minmax(64px, 1fr));
+  grid-template-columns: minmax(180px, 1.6fr) repeat(5, minmax(72px, 1fr));
   align-items: center;
   padding: 10px 14px;
   gap: 8px;

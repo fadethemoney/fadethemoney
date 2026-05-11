@@ -1,5 +1,4 @@
 import type { Game } from "./types";
-import type { ScrapedMatchup } from "./sportsbettingdime";
 import { publicCovering } from "./calc";
 
 export function attachFinalResult(g: Game): Game {
@@ -20,18 +19,10 @@ export function attachFinalResult(g: Game): Game {
   return next;
 }
 
-export function mergeTrends(games: Game[], trends: ScrapedMatchup[]): Game[] {
+export function finalizeGames(games: Game[]): Game[] {
   return games.map((g) => {
-    // SBD's feed only contains upcoming matchups. Don't merge new SBD trends
-    // onto a final game — but DO still derive finalResult from whatever trend
-    // we already had at game time.
     if (g.status === "final") return attachFinalResult(g);
-
-    const match = trends.find(
-      (t) => t.homeAbbr === g.home.abbr && t.awayAbbr === g.away.abbr,
-    );
-    if (!match) return g;
-    const next: Game = { ...g, trend: match.trend };
+    const next: Game = { ...g };
     next.publicCovering = publicCovering(next);
     return next;
   });

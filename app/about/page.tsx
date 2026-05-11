@@ -10,23 +10,22 @@ export default function AboutPage() {
       </h1>
 
       <Block title="The idea">
-        Sportsbooks publish lines designed so the action splits roughly 50/50.
-        When the public piles onto one side, the line moves — and historically the
-        sharp play has often been to fade the crowd. We track that in real time.
+        Sportsbooks publish a spread for every game — the number the favorite has
+        to win by to &ldquo;cover.&rdquo; Underdogs cover by losing close or winning
+        outright. We track which side covers, every game, every day.
       </Block>
 
       <Block title="The data">
         <ul style={{ paddingLeft: 22, color: "#3D3D3A", lineHeight: 1.7 }}>
-          <li><strong>Live scores &amp; schedules</strong> — ESPN&apos;s public scoreboard endpoint.</li>
-          <li><strong>Public betting %, spreads, totals</strong> — SportsBettingDime trends.</li>
-          <li><strong>No database for the MVP</strong> — JSON files, refreshed every few minutes.</li>
+          <li><strong>Scores, schedules, odds, spreads, totals</strong> — SportsGameOdds API.</li>
+          <li><strong>No database for the MVP</strong> — JSON files (Vercel Blob in prod), refreshed by cron.</li>
         </ul>
       </Block>
 
       <Block title="The math">
         For each game we take the home spread, add it to the home score, and subtract the
-        away score. If the result favors the public&apos;s side, they&apos;re covering. If it
-        flips, Vegas is winning the bet right now.
+        away score. Positive means the home side covers; negative means the away side
+        covers. The favored side (negative spread) is the one we track for the streak.
       </Block>
 
       <Block title="Streaks">

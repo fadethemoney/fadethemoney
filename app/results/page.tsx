@@ -40,10 +40,10 @@ export default async function ResultsPage() {
       <div className="section-h">Recent results</div>
       <h1 className="serif" style={{ fontSize: 44, fontWeight: 400, letterSpacing: "-0.022em", marginBottom: 12 }}>
         Last 7 days,<br />
-        <em>public vs Vegas.</em>
+        <em>favorites vs underdogs.</em>
       </h1>
       <p style={{ color: "var(--text-secondary)", fontSize: 15, marginBottom: 24, maxWidth: 560 }}>
-        Daily ledger of how the public&apos;s bets fared against the spread.
+        Daily ledger of how favorites fared against the spread.
       </p>
 
       <div style={{
@@ -53,14 +53,14 @@ export default async function ResultsPage() {
         marginBottom: 28,
       }}>
         <SummaryCard
-          label="Public wins"
+          label="Favorite covers"
           value={totals.publicWins}
           pct={decided > 0 ? publicPct : null}
           color="var(--public-text)"
           highlight={overallLeader === "public"}
         />
         <SummaryCard
-          label="Vegas wins"
+          label="Underdog covers"
           value={totals.vegasWins}
           pct={decided > 0 ? vegasPct : null}
           color="var(--vegas-text)"
@@ -75,7 +75,7 @@ export default async function ResultsPage() {
         />
         <SummaryCard
           label="7-day leader"
-          value={overallLeader === "public" ? "Public" : overallLeader === "vegas" ? "Vegas" : "Even"}
+          value={overallLeader === "public" ? "Favs" : overallLeader === "vegas" ? "Dogs" : "Even"}
           pct={null}
           color={
             overallLeader === "public" ? "var(--public-text)" :
@@ -95,8 +95,8 @@ export default async function ResultsPage() {
           <thead>
             <tr style={{ background: "var(--bg-section)", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.12em", fontSize: 11 }}>
               <th style={{ textAlign: "left", padding: "14px 18px" }}>Date</th>
-              <th style={{ textAlign: "right", padding: "14px 18px" }}>Public</th>
-              <th style={{ textAlign: "right", padding: "14px 18px" }}>Vegas</th>
+              <th style={{ textAlign: "right", padding: "14px 18px" }}>Favs</th>
+              <th style={{ textAlign: "right", padding: "14px 18px" }}>Dogs</th>
               <th style={{ textAlign: "right", padding: "14px 18px" }}>Push</th>
               <th style={{ textAlign: "right", padding: "14px 18px" }}>Winner</th>
             </tr>
@@ -111,10 +111,10 @@ export default async function ResultsPage() {
               const winner =
                 total === 0 ? "—" :
                 d.publicWins === d.vegasWins ? "—" :
-                d.publicWins > d.vegasWins ? "Public" : "Vegas";
+                d.publicWins > d.vegasWins ? "Favs" : "Dogs";
               const winnerColor =
-                winner === "Public" ? "var(--public-text)" :
-                winner === "Vegas" ? "var(--vegas-text)" : "var(--text-muted)";
+                winner === "Favs" ? "var(--public-text)" :
+                winner === "Dogs" ? "var(--vegas-text)" : "var(--text-muted)";
               const empty = total === 0;
               const note = empty
                 ? games > 0 ? `${games} game${games === 1 ? "" : "s"} · pending` : "no games"

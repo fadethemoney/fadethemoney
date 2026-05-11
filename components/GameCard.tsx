@@ -11,22 +11,6 @@ function fmtOdds(o: string | null) {
   return o.startsWith("+") || o.startsWith("-") ? o : `+${o}`;
 }
 
-const HEAVY_THRESHOLD = 65;
-
-function Pct({ n, dollar, market }: { n: number; dollar?: boolean; market: string }) {
-  const cls = `or-cell or-pct${dollar ? " dollar" : ""}`;
-  if (!Number.isFinite(n) || n === 0) {
-    return <span className={cls} data-market={market}>—</span>;
-  }
-  const heavy = n >= HEAVY_THRESHOLD;
-  return (
-    <span className={`${cls}${heavy ? " heavy" : ""}`} data-market={market}>
-      {heavy && <span className="heavy-dot" aria-hidden />}
-      {Math.round(n)}%
-    </span>
-  );
-}
-
 function timeLabel(g: Game) {
   if (g.status === "live") return g.period ?? "LIVE";
   if (g.status === "final") return g.period ?? "Final";
@@ -35,7 +19,7 @@ function timeLabel(g: Game) {
 
 export function GameCard({ game }: { game: Game }) {
   const t = game.trend;
-  const publicSide: Side | null = t?.pickedSide ?? null;
+  const favSide: Side | null = t?.pickedSide ?? null;
   const covering = publicCovering(game);
   const isFinal = game.status === "final" && game.finalResult;
 
@@ -52,41 +36,33 @@ export function GameCard({ game }: { game: Game }) {
         <div className="odds-grid">
           <OddsRow
             team={game.away}
-            isPublic={publicSide === "away"}
-            odds={t.mlOddsAway}
-            mlBet={t.mlBetPctAway}
-            mlMoney={t.moneyPctAway}
-            line={fmtSpread(-t.spread)}
-            spreadBet={t.publicPctAway}
-            spreadMoney={t.spreadMoneyPctAway}
+            isFavorite={favSide === "away"}
+            ml={t.mlOddsAway}
+            spread={fmtSpread(-t.spread)}
+            spreadOdds={t.spreadOddsAway}
             totalLabel={`o ${t.total}`}
-            totalBet={t.totalOverBetPct}
-            totalMoney={t.totalOverMoneyPct}
+            totalOdds={t.totalOddsOver}
           />
           <OddsRow
             team={game.home}
-            isPublic={publicSide === "home"}
-            odds={t.mlOddsHome}
-            mlBet={t.mlBetPctHome}
-            mlMoney={t.moneyPctHome}
-            line={fmtSpread(t.spread)}
-            spreadBet={t.publicPctHome}
-            spreadMoney={t.spreadMoneyPctHome}
+            isFavorite={favSide === "home"}
+            ml={t.mlOddsHome}
+            spread={fmtSpread(t.spread)}
+            spreadOdds={t.spreadOddsHome}
             totalLabel={`u ${t.total}`}
-            totalBet={t.totalUnderBetPct}
-            totalMoney={t.totalUnderMoneyPct}
+            totalOdds={t.totalOddsUnder}
           />
         </div>
       ) : (
         <>
           <TeamLine team={game.away} />
           <TeamLine team={game.home} />
-          <div className="no-trend">No betting trend yet</div>
+          <div className="no-trend">No odds yet</div>
         </>
       )}
 
       <div className="card-footer">
-        <span>{t ? `Public: ${publicSide === "home" ? game.home.abbr : game.away.abbr} ${fmtSpread(publicSide === "home" ? t.spread : -t.spread)}` : "—"}</span>
+        <span>{t ? `Fav: ${favSide === "home" ? game.home.abbr : game.away.abbr} ${fmtSpread(favSide === "home" ? t.spread : -t.spread)}` : "—"}</span>
         <ResultPill game={game} covering={covering} />
       </div>
 
@@ -96,32 +72,26 @@ export function GameCard({ game }: { game: Game }) {
 }
 
 function OddsRow({
-  team, isPublic, odds, mlBet, mlMoney,
-  line, spreadBet, spreadMoney,
-  totalLabel, totalBet, totalMoney,
+  team, isFavorite, ml, spread, spreadOdds, totalLabel, totalOdds,
 }: {
-  team: Game["home"]; isPublic: boolean;
-  odds: string | null; mlBet: number; mlMoney: number;
-  line: string; spreadBet: number; spreadMoney: number;
-  totalLabel: string; totalBet: number; totalMoney: number;
+  team: Game["home"]; isFavorite: boolean;
+  ml: string | null;
+  spread: string; spreadOdds: string | null;
+  totalLabel: string; totalOdds: string | null;
 }) {
   return (
-    <div className={`odds-row${isPublic ? " is-public" : ""}`}>
+    <div className={`odds-row${isFavorite ? " is-public" : ""}`}>
       <span className="or-cell or-team">
         <span className="team-abbr">{team.abbr}</span>
         <span className="team-name">{team.name}</span>
         <span className="team-score">{team.score ?? ""}</span>
-        {isPublic && <span className="pub-tag">Pub</span>}
+        {isFavorite && <span className="pub-tag">Fav</span>}
       </span>
-      <span className="or-cell or-line" data-market="ml">{fmtOdds(odds)}</span>
-      <Pct n={mlBet} market="ml" />
-      <Pct n={mlMoney} dollar market="ml" />
-      <span className="or-cell or-line" data-market="spread">{line}</span>
-      <Pct n={spreadBet} market="spread" />
-      <Pct n={spreadMoney} dollar market="spread" />
+      <span className="or-cell or-line" data-market="ml">{fmtOdds(ml)}</span>
+      <span className="or-cell or-line" data-market="spread">{spread}</span>
+      <span className="or-cell or-line" data-market="spread">{fmtOdds(spreadOdds)}</span>
       <span className="or-cell or-line" data-market="total">{totalLabel}</span>
-      <Pct n={totalBet} market="total" />
-      <Pct n={totalMoney} dollar market="total" />
+      <span className="or-cell or-line" data-market="total">{fmtOdds(totalOdds)}</span>
     </div>
   );
 }
@@ -142,12 +112,12 @@ function ResultPill({ game, covering }: { game: Game; covering: boolean | null }
   }
   if (game.status === "final" && game.finalResult) {
     const c = game.finalResult.publicCovered;
-    if (c === true) return <span className="result-pill result-public">Public won</span>;
-    if (c === false) return <span className="result-pill result-vegas">Vegas won</span>;
+    if (c === true) return <span className="result-pill result-public">Favorite covered</span>;
+    if (c === false) return <span className="result-pill result-vegas">Dog covered</span>;
     return <span className="result-pill result-pending">Push</span>;
   }
-  if (covering === true) return <span className="result-pill result-public">Public winning</span>;
-  if (covering === false) return <span className="result-pill result-vegas">Vegas winning</span>;
+  if (covering === true) return <span className="result-pill result-public">Favorite covering</span>;
+  if (covering === false) return <span className="result-pill result-vegas">Dog covering</span>;
   return <span className="result-pill result-pending">Push</span>;
 }
 
@@ -160,10 +130,10 @@ function ResultLine({ game }: { game: Game }) {
       ? `Total push ${t.total}`
       : `Total ${r.totalGoOver ? "OVER" : "UNDER"} ${t.total}`;
   if (covered === true) {
-    return <div className="card-resultline public">✓ <em>Public covered</em> · {totalText}</div>;
+    return <div className="card-resultline public">✓ <em>Favorite covered</em> · {totalText}</div>;
   }
   if (covered === false) {
-    return <div className="card-resultline">✗ <em>Public did not cover</em> · {totalText}</div>;
+    return <div className="card-resultline">✗ <em>Underdog covered</em> · {totalText}</div>;
   }
   return <div className="card-resultline">— Push · {totalText}</div>;
 }

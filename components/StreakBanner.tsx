@@ -11,16 +11,16 @@ export function StreakBanner({ streak }: { streak: StreakState }) {
       </div>
     );
   }
-  const isPublic = streak.current === "public";
+  const favs = streak.current === "public";
   return (
     <div className="streak-banner">
       <div>
         <span className="streak-label">Active streak</span>
         <span className="streak-text">
-          <strong className={isPublic ? "" : "vegas"}>
-            {isPublic ? "Public" : "Vegas"}
+          <strong className={favs ? "" : "vegas"}>
+            {favs ? "Favorites" : "Underdogs"}
           </strong>{" "}
-          on a {streak.count}-game run
+          on a {streak.count}-game ATS run
         </span>
       </div>
       {streak.count >= 2 && <span className="notified-pill">● Notified</span>}
