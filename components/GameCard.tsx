@@ -1,5 +1,8 @@
 import type { Game, Side } from "@/lib/types";
-import { publicCovering } from "@/lib/calc";
+import { publicCovering, todayKey } from "@/lib/calc";
+import { etDateKeyOf } from "@/lib/time";
+
+const ET_TZ = "America/New_York";
 
 function fmtSpread(n: number) {
   if (n === 0) return "PK";
@@ -14,7 +17,21 @@ function fmtOdds(o: string | null) {
 function timeLabel(g: Game) {
   if (g.status === "live") return g.period ?? "LIVE";
   if (g.status === "final") return g.period ?? "Final";
-  return new Date(g.startTime).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const d = new Date(g.startTime);
+  const time = d.toLocaleTimeString("en-US", {
+    timeZone: ET_TZ,
+    hour: "numeric",
+    minute: "2-digit",
+  });
+  const gameKey = etDateKeyOf(g.startTime);
+  if (gameKey === todayKey()) return `${time} ET`;
+  const date = d.toLocaleDateString("en-US", {
+    timeZone: ET_TZ,
+    weekday: "short",
+    month: "numeric",
+    day: "numeric",
+  });
+  return `${date} · ${time} ET`;
 }
 
 export function GameCard({ game }: { game: Game }) {
