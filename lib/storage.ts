@@ -103,7 +103,17 @@ export async function writeStore(store: DataStore): Promise<void> {
 
 export async function upsertGames(incoming: Game[]): Promise<DataStore> {
   const store = await readStoreFresh();
-  const map = new Map(store.games.map((g) => [g.id, g]));
+  const incomingIds = new Set(incoming.map((g) => g.id));
+  const map = new Map<string, Game>();
+
+  // Keep historical finals from prior pulls — they back the /results page.
+  // Drop any scheduled/live game the latest pull didn't return: it's either
+  // stale data from a previous data source, or an event the API dropped.
+  for (const g of store.games) {
+    if (g.status === "final" || incomingIds.has(g.id)) {
+      map.set(g.id, g);
+    }
+  }
   for (const g of incoming) {
     const existing = map.get(g.id);
     map.set(g.id, { ...existing, ...g });
