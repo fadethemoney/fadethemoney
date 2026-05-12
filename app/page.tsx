@@ -32,12 +32,14 @@ function eyebrowText(streak: { current: "public" | "vegas" | null; count: number
   return `Live · ${who} on a ${streak.count}-game ATS run`;
 }
 
-function nextDayKey(key: string): string {
+function shiftDayKey(key: string, delta: number): string {
   const [y, m, d] = key.split("-").map(Number);
   const dt = new Date(Date.UTC(y, m - 1, d));
-  dt.setUTCDate(dt.getUTCDate() + 1);
+  dt.setUTCDate(dt.getUTCDate() + delta);
   return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}-${String(dt.getUTCDate()).padStart(2, "0")}`;
 }
+function nextDayKey(key: string): string { return shiftDayKey(key, 1); }
+function prevDayKey(key: string): string { return shiftDayKey(key, -1); }
 
 function group(games: Game[]) {
   return {
@@ -56,13 +58,17 @@ export default async function HomePage({
   const store = await readStore();
   const today = todayKey();
   const tomorrow = nextDayKey(today);
+  const yesterday = prevDayKey(today);
   const inWindow = store.games.filter((g) => {
     const k = etDateKeyOf(g.startTime);
-    return k === today || k === tomorrow;
+    return k === yesterday || k === today || k === tomorrow;
   });
   const filtered = league ? inWindow.filter((g) => g.league === league) : inWindow;
   const todays = filtered.filter((g) => etDateKeyOf(g.startTime) === today);
   const tomorrows = filtered.filter((g) => etDateKeyOf(g.startTime) === tomorrow);
+  const yesterdayFinals = filtered.filter(
+    (g) => etDateKeyOf(g.startTime) === yesterday && g.status === "final",
+  );
   const groups = group(todays);
   const tomorrowUpcoming = tomorrows.filter((g) => g.status === "scheduled");
 
@@ -72,6 +78,7 @@ export default async function HomePage({
     groups.live.length === 0 &&
     groups.upcoming.length === 0 &&
     groups.finals.length === 0 &&
+    yesterdayFinals.length === 0 &&
     tomorrowUpcoming.length === 0;
   const upcomingPool = league
     ? store.games.filter((g) => g.league === league)
@@ -130,6 +137,12 @@ export default async function HomePage({
           <GamesSection
             label={`Final · ${groups.finals.length} game${groups.finals.length === 1 ? "" : "s"}`}
             games={groups.finals}
+          />
+        )}
+        {yesterdayFinals.length > 0 && (
+          <GamesSection
+            label={`Yesterday's results · ${yesterdayFinals.length} game${yesterdayFinals.length === 1 ? "" : "s"}`}
+            games={yesterdayFinals}
           />
         )}
         {tomorrowUpcoming.length > 0 && (
