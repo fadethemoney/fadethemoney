@@ -377,7 +377,7 @@ header.site {
   .market-tabs { display: flex; }
   .odds-grid { font-size: 13px; }
   .odds-grid-head, .odds-row {
-    grid-template-columns: minmax(120px, 1.4fr) minmax(64px, 1fr) minmax(56px, 1fr) minmax(56px, 1fr);
+    grid-template-columns: minmax(170px, 2fr) minmax(60px, 1fr) minmax(52px, 0.9fr) minmax(52px, 0.9fr);
     padding: 10px 12px;
     gap: 6px;
   }

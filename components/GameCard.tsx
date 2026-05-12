@@ -110,7 +110,7 @@ function OddsRow({
         <span className="team-abbr">{team.abbr}</span>
         <span className="team-name">{team.name}</span>
         <span className="team-score">{team.score ?? ""}</span>
-        {isFavorite && <span className="pub-tag">Fav</span>}
+        {isFavorite && <span className="pub-tag">Public</span>}
       </span>
       <span className="or-cell or-line" data-market="ml">{fmtOdds(ml)}</span>
       <span className="or-cell or-line" data-market="spread">{spread}</span>
