@@ -138,11 +138,11 @@ function ResultPill({ game, covering }: { game: Game; covering: boolean | null }
   if (game.status === "final" && game.finalResult) {
     const c = game.finalResult.publicCovered;
     if (c === true) return <span className="result-pill result-public">Favorite covered</span>;
-    if (c === false) return <span className="result-pill result-vegas">Dog covered</span>;
+    if (c === false) return <span className="result-pill result-vegas">Vegas covered</span>;
     return <span className="result-pill result-pending">Push</span>;
   }
   if (covering === true) return <span className="result-pill result-public">Public covering</span>;
-  if (covering === false) return <span className="result-pill result-vegas">Dog covering</span>;
+  if (covering === false) return <span className="result-pill result-vegas">Vegas covering</span>;
   return <span className="result-pill result-pending">Push</span>;
 }
 
