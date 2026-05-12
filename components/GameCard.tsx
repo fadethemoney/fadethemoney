@@ -141,7 +141,7 @@ function ResultPill({ game, covering }: { game: Game; covering: boolean | null }
     if (c === false) return <span className="result-pill result-vegas">Dog covered</span>;
     return <span className="result-pill result-pending">Push</span>;
   }
-  if (covering === true) return <span className="result-pill result-public">Favorite covering</span>;
+  if (covering === true) return <span className="result-pill result-public">Public covering</span>;
   if (covering === false) return <span className="result-pill result-vegas">Dog covering</span>;
   return <span className="result-pill result-pending">Push</span>;
 }
