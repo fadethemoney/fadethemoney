@@ -61,9 +61,6 @@ export default async function HomePage({
   const leagueFiltered = league ? store.games.filter((g) => g.league === league) : store.games;
   const todays = leagueFiltered.filter((g) => etDateKeyOf(g.startTime) === today);
   const tomorrows = leagueFiltered.filter((g) => etDateKeyOf(g.startTime) === tomorrow);
-  const pastFinals = leagueFiltered
-    .filter((g) => g.status === "final" && etDateKeyOf(g.startTime) !== today)
-    .sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime());
   const groups = group(todays);
   const tomorrowUpcoming = tomorrows.filter((g) => g.status === "scheduled");
   const filtered = leagueFiltered;
@@ -74,7 +71,6 @@ export default async function HomePage({
     groups.live.length === 0 &&
     groups.upcoming.length === 0 &&
     groups.finals.length === 0 &&
-    pastFinals.length === 0 &&
     tomorrowUpcoming.length === 0;
   const upcomingPool = league
     ? store.games.filter((g) => g.league === league)
@@ -123,22 +119,16 @@ export default async function HomePage({
             games={groups.live}
           />
         )}
+        {groups.finals.length > 0 && (
+          <GamesSection
+            label={`Recent results · ${groups.finals.length} game${groups.finals.length === 1 ? "" : "s"}`}
+            games={groups.finals}
+          />
+        )}
         {groups.upcoming.length > 0 && (
           <GamesSection
             label={`Upcoming · ${groups.upcoming.length} game${groups.upcoming.length === 1 ? "" : "s"}`}
             games={groups.upcoming}
-          />
-        )}
-        {groups.finals.length > 0 && (
-          <GamesSection
-            label={`Final · ${groups.finals.length} game${groups.finals.length === 1 ? "" : "s"}`}
-            games={groups.finals}
-          />
-        )}
-        {pastFinals.length > 0 && (
-          <GamesSection
-            label={`Past results · ${pastFinals.length} game${pastFinals.length === 1 ? "" : "s"}`}
-            games={pastFinals}
           />
         )}
         {tomorrowUpcoming.length > 0 && (
