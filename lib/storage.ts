@@ -106,11 +106,14 @@ export async function upsertGames(incoming: Game[]): Promise<DataStore> {
   const incomingIds = new Set(incoming.map((g) => g.id));
   const map = new Map<string, Game>();
 
-  // Keep historical finals from prior pulls — they back the /results page.
-  // Drop any scheduled/live game the latest pull didn't return: it's either
-  // stale data from a previous data source, or an event the API dropped.
+  // Keep all finals (back the /results page) plus any recently-started game
+  // even if the latest pull dropped it — completed games often disappear from
+  // odds feeds before they're tagged "final", and we'd lose them otherwise.
+  const RECENT_MS = 72 * 3600_000;
+  const now = Date.now();
   for (const g of store.games) {
-    if (g.status === "final" || incomingIds.has(g.id)) {
+    const recent = now - new Date(g.startTime).getTime() < RECENT_MS;
+    if (g.status === "final" || incomingIds.has(g.id) || recent) {
       map.set(g.id, g);
     }
   }
