@@ -305,19 +305,31 @@ export interface LeagueFetchError {
   message: string;
 }
 
+/**
+ * Free plan = 10 req/min. Each league call can paginate, so firing 4 leagues in
+ * parallel easily bursts past the cap. Fetch sequentially with a short delay
+ * between leagues to stay comfortably under the limit.
+ */
+const PER_LEAGUE_DELAY_MS = 7_000;
+
 export async function fetchAllGames(
   leagues: League[],
   errorsOut?: LeagueFetchError[],
 ): Promise<Game[]> {
   const out: Game[] = [];
-  const results = await Promise.allSettled(leagues.map((l) => fetchLeagueGames(l)));
-  results.forEach((r, i) => {
-    if (r.status === "fulfilled") out.push(...r.value);
-    else {
-      const msg = (r.reason as Error).message;
-      console.warn(`[sportsgameodds] ${leagues[i]} failed:`, msg);
-      errorsOut?.push({ league: leagues[i], message: msg });
+  for (let i = 0; i < leagues.length; i++) {
+    const l = leagues[i];
+    try {
+      const games = await fetchLeagueGames(l);
+      out.push(...games);
+    } catch (e) {
+      const msg = (e as Error).message;
+      console.warn(`[sportsgameodds] ${l} failed:`, msg);
+      errorsOut?.push({ league: l, message: msg });
     }
-  });
+    if (i < leagues.length - 1) {
+      await new Promise((r) => setTimeout(r, PER_LEAGUE_DELAY_MS));
+    }
+  }
   return out;
 }
