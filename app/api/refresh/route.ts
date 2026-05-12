@@ -28,16 +28,28 @@ async function runRefresh(opts: { hoursBack?: number; hoursForward?: number } = 
     }
     return g;
   });
-  // Always re-summarize history from current store state so past "pending"
-  // rows resolve as soon as their games finalize on a later refresh.
-  for (const day of store0.history) {
-    const dayGames = store0.games.filter((g) => g.status === "final" && etDateKeyOf(g.startTime) === day.date);
-    const s = summarizeDay(dayGames);
-    day.publicWins = s.publicWins;
-    day.vegasWins = s.vegasWins;
-    day.pushes = s.pushes;
-    day.games = Array.from(new Set([...day.games, ...dayGames.map((g) => g.id)]));
-  }
+  // Always re-summarize history from current store state. Drop stale
+  // history rows whose referenced games no longer exist in the store
+  // (left over from earlier failed/partial refreshes).
+  const liveIds = new Set(store0.games.map((g) => g.id));
+  store0.history = store0.history
+    .map((day) => {
+      const dayGames = store0.games.filter(
+        (g) => g.status === "final" && etDateKeyOf(g.startTime) === day.date,
+      );
+      const s = summarizeDay(dayGames);
+      return {
+        ...day,
+        publicWins: s.publicWins,
+        vegasWins: s.vegasWins,
+        pushes: s.pushes,
+        games: Array.from(new Set([
+          ...day.games.filter((id) => liveIds.has(id)),
+          ...dayGames.map((g) => g.id),
+        ])),
+      };
+    })
+    .filter((day) => day.games.length > 0);
   await writeStore(store0);
 
   const today = todayKey();
