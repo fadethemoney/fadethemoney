@@ -83,7 +83,7 @@ export function GameCard({ game }: { game: Game }) {
           <span className="game-time">{timeLabel(game)}</span>
           {t && (
             <>
-              {" · "}Fav: {favSide === "home" ? game.home.abbr : game.away.abbr}{" "}
+              {" · "}Public: {favSide === "home" ? game.home.abbr : game.away.abbr}{" "}
               {fmtSpread(favSide === "home" ? t.spread : -t.spread)}
             </>
           )}
@@ -137,7 +137,7 @@ function ResultPill({ game, covering }: { game: Game; covering: boolean | null }
   }
   if (game.status === "final" && game.finalResult) {
     const c = game.finalResult.publicCovered;
-    if (c === true) return <span className="result-pill result-public">Favorite covered</span>;
+    if (c === true) return <span className="result-pill result-public">Public covered</span>;
     if (c === false) return <span className="result-pill result-vegas">Vegas covered</span>;
     return <span className="result-pill result-pending">Push</span>;
   }
@@ -155,10 +155,10 @@ function ResultLine({ game }: { game: Game }) {
       ? `Total push ${t.total}`
       : `Total ${r.totalGoOver ? "OVER" : "UNDER"} ${t.total}`;
   if (covered === true) {
-    return <div className="card-resultline public">✓ <em>Favorite covered</em> · {totalText}</div>;
+    return <div className="card-resultline public">✓ <em>Public covered</em> · {totalText}</div>;
   }
   if (covered === false) {
-    return <div className="card-resultline">✗ <em>Underdog covered</em> · {totalText}</div>;
+    return <div className="card-resultline">✗ <em>Vegas covered</em> · {totalText}</div>;
   }
   return <div className="card-resultline">— Push · {totalText}</div>;
 }

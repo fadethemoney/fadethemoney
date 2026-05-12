@@ -58,19 +58,15 @@ export default async function HomePage({
   const store = await readStore();
   const today = todayKey();
   const tomorrow = nextDayKey(today);
-  const yesterday = prevDayKey(today);
-  const inWindow = store.games.filter((g) => {
-    const k = etDateKeyOf(g.startTime);
-    return k === yesterday || k === today || k === tomorrow;
-  });
-  const filtered = league ? inWindow.filter((g) => g.league === league) : inWindow;
-  const todays = filtered.filter((g) => etDateKeyOf(g.startTime) === today);
-  const tomorrows = filtered.filter((g) => etDateKeyOf(g.startTime) === tomorrow);
-  const yesterdayFinals = filtered.filter(
-    (g) => etDateKeyOf(g.startTime) === yesterday && g.status === "final",
-  );
+  const leagueFiltered = league ? store.games.filter((g) => g.league === league) : store.games;
+  const todays = leagueFiltered.filter((g) => etDateKeyOf(g.startTime) === today);
+  const tomorrows = leagueFiltered.filter((g) => etDateKeyOf(g.startTime) === tomorrow);
+  const pastFinals = leagueFiltered
+    .filter((g) => g.status === "final" && etDateKeyOf(g.startTime) !== today)
+    .sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime());
   const groups = group(todays);
   const tomorrowUpcoming = tomorrows.filter((g) => g.status === "scheduled");
+  const filtered = leagueFiltered;
 
   // Fallback: if today + tomorrow are both empty, surface the next upcoming
   // games so the page never looks blank between schedule days.
@@ -78,7 +74,7 @@ export default async function HomePage({
     groups.live.length === 0 &&
     groups.upcoming.length === 0 &&
     groups.finals.length === 0 &&
-    yesterdayFinals.length === 0 &&
+    pastFinals.length === 0 &&
     tomorrowUpcoming.length === 0;
   const upcomingPool = league
     ? store.games.filter((g) => g.league === league)
@@ -139,10 +135,10 @@ export default async function HomePage({
             games={groups.finals}
           />
         )}
-        {yesterdayFinals.length > 0 && (
+        {pastFinals.length > 0 && (
           <GamesSection
-            label={`Yesterday's results · ${yesterdayFinals.length} game${yesterdayFinals.length === 1 ? "" : "s"}`}
-            games={yesterdayFinals}
+            label={`Past results · ${pastFinals.length} game${pastFinals.length === 1 ? "" : "s"}`}
+            games={pastFinals}
           />
         )}
         {tomorrowUpcoming.length > 0 && (
