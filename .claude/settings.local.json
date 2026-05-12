@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e \"const s = JSON.parse\\(require\\('fs'\\).readFileSync\\('data/store.json','utf8'\\)\\); const fresh = s.games.filter\\(g => g.trend?.source === 'sportsgameodds'\\); console.log\\('fresh from new API:', fresh.length\\); console.log\\('sample:', JSON.stringify\\(fresh[0], null, 2\\)\\);\")",
+      "Bash(node -e \"const s = JSON.parse\\(require\\('fs'\\).readFileSync\\('data/store.json','utf8'\\)\\); console.log\\('history entries:', s.history.length\\); console.log\\(JSON.stringify\\(s.history, null, 2\\)\\);\")",
+      "WebFetch(domain:fadethemoney.com)",
+      "Bash(curl -sf https://fadethemoney.com/api/refresh?force=1)",
+      "Bash(curl -sf https://fadethemoney.com/api/games)",
+      "Bash(node -e ' *)"
+    ]
+  }
+}

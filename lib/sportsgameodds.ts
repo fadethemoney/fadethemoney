@@ -300,12 +300,24 @@ export async function fetchLeagueGames(
   return games;
 }
 
-export async function fetchAllGames(leagues: League[]): Promise<Game[]> {
+export interface LeagueFetchError {
+  league: League;
+  message: string;
+}
+
+export async function fetchAllGames(
+  leagues: League[],
+  errorsOut?: LeagueFetchError[],
+): Promise<Game[]> {
   const out: Game[] = [];
   const results = await Promise.allSettled(leagues.map((l) => fetchLeagueGames(l)));
   results.forEach((r, i) => {
     if (r.status === "fulfilled") out.push(...r.value);
-    else console.warn(`[sportsgameodds] ${leagues[i]} failed:`, (r.reason as Error).message);
+    else {
+      const msg = (r.reason as Error).message;
+      console.warn(`[sportsgameodds] ${leagues[i]} failed:`, msg);
+      errorsOut?.push({ league: leagues[i], message: msg });
+    }
   });
   return out;
 }

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { fetchAllGames, SportsGameOddsError } from "@/lib/sportsgameodds";
+import { fetchAllGames, SportsGameOddsError, type LeagueFetchError } from "@/lib/sportsgameodds";
 import { attachFinalResult, finalizeGames } from "@/lib/merge";
 import { upsertGames, recordDaily, setStreak, readStore, writeStore } from "@/lib/storage";
 import { summarizeDay, todayKey } from "@/lib/calc";
@@ -12,7 +12,8 @@ export const dynamic = "force-dynamic";
 const LEAGUES: League[] = ["nba", "mlb", "nfl", "nhl"];
 
 async function runRefresh() {
-  const fetched = await fetchAllGames(LEAGUES);
+  const fetchErrors: LeagueFetchError[] = [];
+  const fetched = await fetchAllGames(LEAGUES, fetchErrors);
   const all = finalizeGames(fetched);
   await upsertGames(all);
 
@@ -68,7 +69,7 @@ async function runRefresh() {
   }
   await setStreak(streak);
 
-  return { ok: true, count: all.length, streak };
+  return { ok: true, count: all.length, streak, fetchErrors };
 }
 
 function authorize(req: Request): NextResponse | null {
