@@ -11,9 +11,9 @@ export const dynamic = "force-dynamic";
 
 const LEAGUES: League[] = ["nba", "mlb", "nfl", "nhl"];
 
-async function runRefresh() {
+async function runRefresh(opts: { hoursBack?: number; hoursForward?: number } = {}) {
   const fetchErrors: LeagueFetchError[] = [];
-  const fetched = await fetchAllGames(LEAGUES, fetchErrors);
+  const fetched = await fetchAllGames(LEAGUES, fetchErrors, opts);
   const all = finalizeGames(fetched);
   await upsertGames(all);
 
@@ -86,6 +86,10 @@ const MIN_INTERVAL_MS = 60_000;
 async function maybeRefresh(req: Request) {
   const url = new URL(req.url);
   const force = url.searchParams.get("force") === "1" || !!req.headers.get("x-vercel-cron");
+  const days = Number(url.searchParams.get("days"));
+  const opts = Number.isFinite(days) && days > 0
+    ? { hoursBack: days * 24, hoursForward: 48 }
+    : {};
   if (!force) {
     const store = await readStore();
     const ageMs = Date.now() - new Date(store.lastUpdated).getTime();
@@ -93,7 +97,7 @@ async function maybeRefresh(req: Request) {
       return { ok: true, skipped: true, ageMs, count: store.games.length };
     }
   }
-  return runRefresh();
+  return runRefresh(opts);
 }
 
 async function handle(req: Request) {

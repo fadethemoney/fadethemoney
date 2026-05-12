@@ -315,12 +315,13 @@ const PER_LEAGUE_DELAY_MS = 7_000;
 export async function fetchAllGames(
   leagues: League[],
   errorsOut?: LeagueFetchError[],
+  opts: { hoursBack?: number; hoursForward?: number } = {},
 ): Promise<Game[]> {
   const out: Game[] = [];
   for (let i = 0; i < leagues.length; i++) {
     const l = leagues[i];
     try {
-      const games = await fetchLeagueGames(l);
+      const games = await fetchLeagueGames(l, opts);
       out.push(...games);
     } catch (e) {
       const msg = (e as Error).message;
