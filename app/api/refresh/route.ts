@@ -28,16 +28,17 @@ async function runRefresh(opts: { hoursBack?: number; hoursForward?: number } = 
     }
     return g;
   });
-  if (backfilled) {
-    for (const day of store0.history) {
-      const dayGames = store0.games.filter((g) => day.games.includes(g.id));
-      const s = summarizeDay(dayGames);
-      day.publicWins = s.publicWins;
-      day.vegasWins = s.vegasWins;
-      day.pushes = s.pushes;
-    }
-    await writeStore(store0);
+  // Always re-summarize history from current store state so past "pending"
+  // rows resolve as soon as their games finalize on a later refresh.
+  for (const day of store0.history) {
+    const dayGames = store0.games.filter((g) => g.status === "final" && etDateKeyOf(g.startTime) === day.date);
+    const s = summarizeDay(dayGames);
+    day.publicWins = s.publicWins;
+    day.vegasWins = s.vegasWins;
+    day.pushes = s.pushes;
+    day.games = Array.from(new Set([...day.games, ...dayGames.map((g) => g.id)]));
   }
+  await writeStore(store0);
 
   const today = todayKey();
   const todays = all.filter((g) => etDateKeyOf(g.startTime) === today);
