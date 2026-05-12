@@ -288,7 +288,6 @@ export async function fetchLeagueGames(
     startsAfter,
     startsBefore,
     limit: "100",
-    oddsAvailable: "true",
   });
 
   const events = await fetchEvents(params);

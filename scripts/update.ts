@@ -29,9 +29,20 @@ async function run() {
   await upsertGames(all);
 
   const today = todayKey();
+  // Group every game by its ET date and record per-day so prior days backfill
+  // (the API window covers ~36h back, so yesterday's finals reach us too).
+  const byDay = new Map<string, typeof all>();
+  for (const g of all) {
+    const d = etDateKeyOf(g.startTime);
+    const arr = byDay.get(d) ?? [];
+    arr.push(g);
+    byDay.set(d, arr);
+  }
+  for (const [date, games] of byDay) {
+    const summary = summarizeDay(games);
+    await recordDaily(date, { ...summary, games: games.map((g) => g.id) });
+  }
   const todays = all.filter((g) => etDateKeyOf(g.startTime) === today);
-  const summary = summarizeDay(todays);
-  await recordDaily(today, { ...summary, games: todays.map((g) => g.id) });
 
   const store = await readStore();
   const finals = todays.filter((g) => g.status === "final" && g.finalResult);
