@@ -13,11 +13,17 @@ try {
 
 import { fetchAllGames } from "../lib/sportsgameodds";
 import { finalizeGames } from "../lib/merge";
-import { readStore, upsertGames, recordDaily, setStreak } from "../lib/storage";
+import { readStore, upsertGames, recordDaily, setStreak, setLeagueStreaks } from "../lib/storage";
 import { summarizeDay, todayKey } from "../lib/calc";
 import { etDateKeyOf } from "../lib/time";
 import { notifyAdmin } from "../lib/mailer";
-import type { League, StreakState } from "../lib/types";
+import {
+  applyGameToLeagueStreaks,
+  buildAtsEmail,
+  buildTotalEmail,
+  getLeagueStreaks,
+} from "../lib/streak";
+import type { League, LeagueStreaks, StreakState } from "../lib/types";
 
 const LEAGUES: League[] = ["nba", "mlb", "nfl", "nhl"];
 
@@ -63,17 +69,77 @@ async function run() {
   streak.history = streak.history.slice(0, 50);
 
   if (streak.count >= 2 && streak.count > streak.lastNotifiedCount) {
+    const after = await readStore();
+    const gameById = new Map(after.games.map((g) => [g.id, g]));
+    const contributing = streak.history.slice(0, streak.count);
+    const lines = contributing.map((h) => {
+      const id = h.date.split(":").slice(1).join(":");
+      const g = gameById.get(id);
+      if (!g) return `• (game ${id})`;
+      const favSide = g.trend?.pickedSide;
+      const fav = favSide === "home" ? g.home : favSide === "away" ? g.away : null;
+      const dog = favSide === "home" ? g.away : favSide === "away" ? g.home : null;
+      const covered = h.winner === "public" ? fav : dog;
+      const homeSpread = g.trend?.spread;
+      let spreadStr = "";
+      if (typeof homeSpread === "number" && favSide) {
+        const favSpread = favSide === "home" ? homeSpread : -homeSpread; // negative
+        const shown = h.winner === "public" ? favSpread : -favSpread;
+        spreadStr = ` ${shown > 0 ? "+" : ""}${shown}`;
+      }
+      const matchup = `${g.away.abbr} @ ${g.home.abbr}`;
+      const coveredName = covered?.abbr ?? (h.winner === "public" ? "favorite" : "underdog");
+      return `• ${g.league.toUpperCase()} — ${matchup} → ${coveredName} covered${spreadStr}`;
+    });
+    const side = streak.current?.toUpperCase();
+    const header = `${side} has won ${streak.count} bets in a row (spread / ATS).`;
+    const text = [header, "", ...lines].join("\n");
     await notifyAdmin({
       subject: `Fade The Money — ${streak.current} on a ${streak.count}-game streak`,
-      text: `${streak.current?.toUpperCase()} has won ${streak.count} bets in a row.`,
+      text,
     });
     streak.lastNotifiedCount = streak.count;
   }
   await setStreak(streak);
 
+  // Per-league × per-category (ATS + Total) streaks with separate emails.
+  const perLeague: Partial<Record<League, LeagueStreaks>> = { ...(store.streaks ?? {}) };
+  for (const g of finals) {
+    const prev = getLeagueStreaks(perLeague, g.league);
+    perLeague[g.league] = applyGameToLeagueStreaks(prev, g, today);
+  }
+  const afterPer = await readStore();
+  const gameByIdPer = new Map(afterPer.games.map((g) => [g.id, g]));
+  for (const league of LEAGUES) {
+    const ls = perLeague[league];
+    if (!ls) continue;
+    const atsEmail = buildAtsEmail(league, ls.ats, gameByIdPer);
+    if (atsEmail) {
+      await notifyAdmin({ subject: atsEmail.subject, text: atsEmail.text });
+      ls.ats = { ...ls.ats, lastNotifiedCount: atsEmail.newLastNotifiedCount };
+    }
+    const totalEmail = buildTotalEmail(league, ls.total, gameByIdPer);
+    if (totalEmail) {
+      await notifyAdmin({ subject: totalEmail.subject, text: totalEmail.text });
+      ls.total = { ...ls.total, lastNotifiedCount: totalEmail.newLastNotifiedCount };
+    }
+  }
+  await setLeagueStreaks(perLeague);
+
   console.log("[update] done", {
     games: all.length,
     streak: `${streak.current ?? "—"} x${streak.count}`,
+    perLeague: Object.fromEntries(
+      LEAGUES.map((l) => {
+        const ls = perLeague[l];
+        return [
+          l,
+          ls
+            ? `ats ${ls.ats.current ?? "—"} x${ls.ats.count} · tot ${ls.total.current ?? "—"} x${ls.total.count}`
+            : "—",
+        ];
+      }),
+    ),
   });
 }
 

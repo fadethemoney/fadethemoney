@@ -1,11 +1,17 @@
 import { NextResponse } from "next/server";
 import { fetchAllGames, SportsGameOddsError, type LeagueFetchError } from "@/lib/sportsgameodds";
 import { attachFinalResult, finalizeGames } from "@/lib/merge";
-import { upsertGames, recordDaily, setStreak, readStore, writeStore } from "@/lib/storage";
+import { upsertGames, recordDaily, setStreak, setLeagueStreaks, readStore, writeStore } from "@/lib/storage";
 import { summarizeDay, todayKey } from "@/lib/calc";
 import { etDateKeyOf } from "@/lib/time";
 import { notifyAdmin } from "@/lib/mailer";
-import type { League, StreakState } from "@/lib/types";
+import {
+  applyGameToLeagueStreaks,
+  buildAtsEmail,
+  buildTotalEmail,
+  getLeagueStreaks,
+} from "@/lib/streak";
+import type { League, LeagueStreaks, StreakState } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -82,7 +88,39 @@ async function runRefresh(opts: { hoursBack?: number; hoursForward?: number } = 
   }
   await setStreak(streak);
 
-  return { ok: true, count: all.length, streak, fetchErrors };
+  // Per-league × per-category (ATS + Total) streaks with separate emails.
+  const perLeague: Partial<Record<League, LeagueStreaks>> = { ...(store.streaks ?? {}) };
+  for (const g of todays.filter((g) => g.status === "final" && g.finalResult)) {
+    const prev = getLeagueStreaks(perLeague, g.league);
+    perLeague[g.league] = applyGameToLeagueStreaks(prev, g, today);
+  }
+  const afterPer = await readStore();
+  const gameByIdPer = new Map(afterPer.games.map((g) => [g.id, g]));
+  for (const league of LEAGUES) {
+    const ls = perLeague[league];
+    if (!ls) continue;
+    const atsEmail = buildAtsEmail(league, ls.ats, gameByIdPer);
+    if (atsEmail) {
+      try {
+        await notifyAdmin({ subject: atsEmail.subject, text: atsEmail.text });
+      } catch (e) {
+        console.warn("[refresh] notifyAdmin (ats) failed:", (e as Error).message);
+      }
+      ls.ats = { ...ls.ats, lastNotifiedCount: atsEmail.newLastNotifiedCount };
+    }
+    const totalEmail = buildTotalEmail(league, ls.total, gameByIdPer);
+    if (totalEmail) {
+      try {
+        await notifyAdmin({ subject: totalEmail.subject, text: totalEmail.text });
+      } catch (e) {
+        console.warn("[refresh] notifyAdmin (total) failed:", (e as Error).message);
+      }
+      ls.total = { ...ls.total, lastNotifiedCount: totalEmail.newLastNotifiedCount };
+    }
+  }
+  await setLeagueStreaks(perLeague);
+
+  return { ok: true, count: all.length, streak, streaks: perLeague, fetchErrors };
 }
 
 function authorize(req: Request): NextResponse | null {

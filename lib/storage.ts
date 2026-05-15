@@ -1,7 +1,7 @@
 import { promises as fs } from "fs";
 import path from "path";
 import { put, list } from "@vercel/blob";
-import type { DataStore, Game, DailyRecord, StreakState } from "./types";
+import type { DataStore, Game, DailyRecord, StreakState, League, LeagueStreaks } from "./types";
 
 /**
  * Storage layer.
@@ -29,6 +29,7 @@ const EMPTY: DataStore = {
   games: [],
   history: [],
   streak: { current: null, count: 0, lastNotifiedCount: 0, history: [] },
+  streaks: {},
   lastUpdated: new Date(0).toISOString(),
 };
 
@@ -149,6 +150,14 @@ export async function recordDaily(date: string, rec: Partial<DailyRecord>): Prom
 export async function setStreak(streak: StreakState): Promise<void> {
   const store = await readStoreFresh();
   store.streak = streak;
+  await writeStore(store);
+}
+
+export async function setLeagueStreaks(
+  streaks: Partial<Record<League, LeagueStreaks>>,
+): Promise<void> {
+  const store = await readStoreFresh();
+  store.streaks = streaks;
   await writeStore(store);
 }
 

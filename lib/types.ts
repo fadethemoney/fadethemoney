@@ -66,6 +66,23 @@ export interface StreakState {
   history: { date: string; winner: "public" | "vegas" }[];
 }
 
+export type BetCategory = "ats" | "total";
+
+export type AtsWinner = "public" | "vegas";
+export type TotalWinner = "over" | "under";
+
+export interface CategoryStreak<W extends string> {
+  current: W | null;
+  count: number;
+  lastNotifiedCount: number;
+  history: { date: string; winner: W }[];
+}
+
+export interface LeagueStreaks {
+  ats: CategoryStreak<AtsWinner>;
+  total: CategoryStreak<TotalWinner>;
+}
+
 export interface DailyRecord {
   date: string;
   publicWins: number;
@@ -78,5 +95,6 @@ export interface DataStore {
   games: Game[];
   history: DailyRecord[];
   streak: StreakState;
+  streaks?: Partial<Record<League, LeagueStreaks>>;
   lastUpdated: string;
 }
