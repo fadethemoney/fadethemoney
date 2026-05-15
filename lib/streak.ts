@@ -97,17 +97,22 @@ function buildLines<W extends string>(
     if (category === "ats") {
       const favSide = g.trend?.pickedSide;
       const fav = favSide === "home" ? g.home : favSide === "away" ? g.away : null;
-      const dog = favSide === "home" ? g.away : favSide === "away" ? g.home : null;
-      const covered = h.winner === "public" ? fav : dog;
       const homeSpread = g.trend?.spread;
-      let spreadStr = "";
-      if (typeof homeSpread === "number" && favSide) {
-        const favSpread = favSide === "home" ? homeSpread : -homeSpread;
-        const shown = h.winner === "public" ? favSpread : -favSpread;
-        spreadStr = ` ${shown > 0 ? "+" : ""}${shown}`;
-      }
-      const coveredName = covered?.abbr ?? (h.winner === "public" ? "favorite" : "underdog");
-      return `• ${g.league.toUpperCase()} — ${matchup} → ${coveredName} covered${spreadStr}`;
+      const favSpread =
+        typeof homeSpread === "number" && favSide
+          ? favSide === "home"
+            ? homeSpread
+            : -homeSpread
+          : null;
+      const publicLabel = fav
+        ? `Public: ${fav.abbr}${favSpread !== null ? ` ${favSpread > 0 ? "+" : ""}${favSpread}` : ""}`
+        : "Public: —";
+      const score =
+        typeof g.home.score === "number" && typeof g.away.score === "number"
+          ? ` ${g.away.score}-${g.home.score}`
+          : "";
+      const outcome = h.winner === "public" ? "PUBLIC WIN ✓" : "VEGAS WIN ✗";
+      return `• ${g.league.toUpperCase()} — ${matchup}${score} — ${publicLabel} → ${outcome}`;
     }
     const total = g.trend?.total;
     const totalStr = typeof total === "number" ? ` (O/U ${total})` : "";
