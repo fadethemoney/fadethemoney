@@ -87,8 +87,9 @@ function buildLines<W extends string>(
   category: BetCategory,
   streak: CategoryStreak<W>,
   gamesById: Map<string, Game>,
+  upToCount: number = streak.count,
 ): string[] {
-  const contributing = streak.history.slice(0, streak.count);
+  const contributing = streak.history.slice(0, upToCount);
   return contributing.map((h) => {
     const id = h.date.split(":").slice(1).join(":");
     const g = gamesById.get(id);
@@ -124,36 +125,49 @@ function buildLines<W extends string>(
   });
 }
 
-export function buildAtsEmail(
+/**
+ * Emit one email per milestone (2, 3, 4, …) between lastNotifiedCount+1 and
+ * streak.count. If multiple games finalize between cron ticks and the streak
+ * jumps several steps at once, every milestone still gets its own alert.
+ */
+export function buildAtsEmails(
   league: League,
   streak: CategoryStreak<AtsWinner>,
   gamesById: Map<string, Game>,
-): StreakEmail | null {
-  if (streak.count < 2 || streak.count <= streak.lastNotifiedCount) return null;
-  const side = streak.current?.toUpperCase();
-  const header = `${league.toUpperCase()} SPREAD — ${side} has won ${streak.count} bets in a row (ATS).`;
-  return {
-    league,
-    category: "ats",
-    subject: `Fade The Money — ${league.toUpperCase()} ${streak.current} on a ${streak.count}-game spread streak`,
-    text: [header, "", ...buildLines("ats", streak, gamesById)].join("\n"),
-    newLastNotifiedCount: streak.count,
-  };
+): StreakEmail[] {
+  const out: StreakEmail[] = [];
+  const start = Math.max(2, streak.lastNotifiedCount + 1);
+  for (let n = start; n <= streak.count; n++) {
+    const side = streak.current?.toUpperCase();
+    const header = `${league.toUpperCase()} SPREAD — ${side} has won ${n} bets in a row (ATS).`;
+    out.push({
+      league,
+      category: "ats",
+      subject: `Fade The Money — ${league.toUpperCase()} ${streak.current} on a ${n}-game spread streak`,
+      text: [header, "", ...buildLines("ats", streak, gamesById, n)].join("\n"),
+      newLastNotifiedCount: n,
+    });
+  }
+  return out;
 }
 
-export function buildTotalEmail(
+export function buildTotalEmails(
   league: League,
   streak: CategoryStreak<TotalWinner>,
   gamesById: Map<string, Game>,
-): StreakEmail | null {
-  if (streak.count < 2 || streak.count <= streak.lastNotifiedCount) return null;
-  const side = streak.current?.toUpperCase();
-  const header = `${league.toUpperCase()} TOTAL — ${side} has hit ${streak.count} games in a row (O/U).`;
-  return {
-    league,
-    category: "total",
-    subject: `Fade The Money — ${league.toUpperCase()} ${streak.current} on a ${streak.count}-game total streak`,
-    text: [header, "", ...buildLines("total", streak, gamesById)].join("\n"),
-    newLastNotifiedCount: streak.count,
-  };
+): StreakEmail[] {
+  const out: StreakEmail[] = [];
+  const start = Math.max(2, streak.lastNotifiedCount + 1);
+  for (let n = start; n <= streak.count; n++) {
+    const side = streak.current?.toUpperCase();
+    const header = `${league.toUpperCase()} TOTAL — ${side} has hit ${n} games in a row (O/U).`;
+    out.push({
+      league,
+      category: "total",
+      subject: `Fade The Money — ${league.toUpperCase()} ${streak.current} on a ${n}-game total streak`,
+      text: [header, "", ...buildLines("total", streak, gamesById, n)].join("\n"),
+      newLastNotifiedCount: n,
+    });
+  }
+  return out;
 }

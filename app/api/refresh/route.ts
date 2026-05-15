@@ -7,8 +7,8 @@ import { etDateKeyOf } from "@/lib/time";
 import { notifyAdmin } from "@/lib/mailer";
 import {
   applyGameToLeagueStreaks,
-  buildAtsEmail,
-  buildTotalEmail,
+  buildAtsEmails,
+  buildTotalEmails,
   getLeagueStreaks,
 } from "@/lib/streak";
 import type { League, LeagueStreaks, StreakState } from "@/lib/types";
@@ -99,23 +99,21 @@ async function runRefresh(opts: { hoursBack?: number; hoursForward?: number } = 
   for (const league of LEAGUES) {
     const ls = perLeague[league];
     if (!ls) continue;
-    const atsEmail = buildAtsEmail(league, ls.ats, gameByIdPer);
-    if (atsEmail) {
+    for (const email of buildAtsEmails(league, ls.ats, gameByIdPer)) {
       try {
-        await notifyAdmin({ subject: atsEmail.subject, text: atsEmail.text });
+        await notifyAdmin({ subject: email.subject, text: email.text });
       } catch (e) {
         console.warn("[refresh] notifyAdmin (ats) failed:", (e as Error).message);
       }
-      ls.ats = { ...ls.ats, lastNotifiedCount: atsEmail.newLastNotifiedCount };
+      ls.ats = { ...ls.ats, lastNotifiedCount: email.newLastNotifiedCount };
     }
-    const totalEmail = buildTotalEmail(league, ls.total, gameByIdPer);
-    if (totalEmail) {
+    for (const email of buildTotalEmails(league, ls.total, gameByIdPer)) {
       try {
-        await notifyAdmin({ subject: totalEmail.subject, text: totalEmail.text });
+        await notifyAdmin({ subject: email.subject, text: email.text });
       } catch (e) {
         console.warn("[refresh] notifyAdmin (total) failed:", (e as Error).message);
       }
-      ls.total = { ...ls.total, lastNotifiedCount: totalEmail.newLastNotifiedCount };
+      ls.total = { ...ls.total, lastNotifiedCount: email.newLastNotifiedCount };
     }
   }
   await setLeagueStreaks(perLeague);
