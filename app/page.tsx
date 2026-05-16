@@ -41,11 +41,19 @@ function shiftDayKey(key: string, delta: number): string {
 function nextDayKey(key: string): string { return shiftDayKey(key, 1); }
 function prevDayKey(key: string): string { return shiftDayKey(key, -1); }
 
+const RECENT_FINAL_WINDOW_MS = 36 * 3600_000;
+
 function group(games: Game[]) {
+  const now = Date.now();
   return {
     live: games.filter((g) => g.status === "live"),
     upcoming: games.filter((g) => g.status === "scheduled"),
-    finals: games.filter((g) => g.status === "final"),
+    finals: games.filter((g) => {
+      if (g.status !== "final") return false;
+      const startedMs = new Date(g.startTime).getTime();
+      if (!Number.isFinite(startedMs)) return false;
+      return now - startedMs < RECENT_FINAL_WINDOW_MS;
+    }),
   };
 }
 
@@ -61,7 +69,10 @@ export default async function HomePage({
   const leagueFiltered = league ? store.games.filter((g) => g.league === league) : store.games;
   const todays = leagueFiltered.filter((g) => etDateKeyOf(g.startTime) === today);
   const tomorrows = leagueFiltered.filter((g) => etDateKeyOf(g.startTime) === tomorrow);
-  const groups = group(todays);
+  // Include any final from the last 36h so Recent Results survives the ET
+  // midnight rollover — group() will apply the 36h window itself.
+  const finalsPool = leagueFiltered.filter((g) => g.status === "final");
+  const groups = group([...todays, ...finalsPool.filter((g) => !todays.includes(g))]);
   const tomorrowUpcoming = tomorrows.filter((g) => g.status === "scheduled");
   const filtered = leagueFiltered;
 
