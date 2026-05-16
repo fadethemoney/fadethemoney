@@ -120,13 +120,15 @@ export async function upsertGames(incoming: Game[]): Promise<DataStore> {
   }
   for (const g of incoming) {
     const existing = map.get(g.id);
-    // Lock the betting trend at kickoff: once a game is live/final, we keep
-    // the trend snapshot we already captured so the "public" side (favorite,
-    // derived from spread sign) doesn't drift while the game is in progress.
-    const lockedTrend =
-      existing && existing.status !== "scheduled" && existing.trend
-        ? existing.trend
-        : g.trend;
+    // Lock the betting trend at kickoff. The line (spread + total) moves
+    // significantly once a game is in progress, so once start time has
+    // passed we keep whatever trend we last captured pre-game and refuse
+    // any further updates. Status alone isn't reliable — feeds can flip
+    // scheduled→live late, by which point the incoming line is already
+    // live-adjusted.
+    const started = Number.isFinite(new Date(g.startTime).getTime())
+      && new Date(g.startTime).getTime() <= now;
+    const lockedTrend = started && existing?.trend ? existing.trend : g.trend;
     map.set(g.id, { ...existing, ...g, trend: lockedTrend });
   }
   store.games = Array.from(map.values()).sort(
