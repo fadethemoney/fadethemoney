@@ -69,7 +69,11 @@ export interface StreakState {
 export type BetCategory = "ats" | "total";
 
 export type AtsWinner = "public" | "vegas";
-export type TotalWinner = "over" | "under";
+// Totals streak uses the same public/vegas framing as ATS:
+//   Public = OVER (the side public bettors typically take)
+//   Vegas  = UNDER
+// This is a proxy: SportsGameOdds doesn't expose real public-action %.
+export type TotalWinner = "public" | "vegas";
 
 export interface CategoryStreak<W extends string> {
   current: W | null;

@@ -23,15 +23,12 @@ async function runRefresh(opts: { hoursBack?: number; hoursForward?: number } = 
   const all = finalizeGames(fetched);
   await upsertGames(all);
 
-  // Backfill finalResult on any stored final missing it, then re-summarize
-  // history so the results page reflects corrected counts.
+  // Attach (or re-attach) finalResult on every stored final using the LOCKED
+  // pregame trend. Idempotent: re-running fixes verdicts that were previously
+  // computed against a live in-game total.
   const store0 = await readStore();
-  let backfilled = false;
   store0.games = store0.games.map((g) => {
-    if (g.status === "final" && g.trend && !g.finalResult) {
-      backfilled = true;
-      return attachFinalResult(g);
-    }
+    if (g.status === "final" && g.trend) return attachFinalResult(g);
     return g;
   });
   // Always re-summarize history from current store state. Drop stale
@@ -58,12 +55,13 @@ async function runRefresh(opts: { hoursBack?: number; hoursForward?: number } = 
     .filter((day) => day.games.length > 0);
   await writeStore(store0);
 
+  // Pull from the store (post-upsert, post-finalResult-attach) so streak and
+  // summary logic see locked-trend verdicts, not live-trend ones from `all`.
+  const store = await readStore();
   const today = todayKey();
-  const todays = all.filter((g) => etDateKeyOf(g.startTime) === today);
+  const todays = store.games.filter((g) => etDateKeyOf(g.startTime) === today);
   const summary = summarizeDay(todays);
   await recordDaily(today, { ...summary, games: todays.map((g) => g.id) });
-
-  const store = await readStore();
   const streak: StreakState = { ...store.streak };
   for (const g of todays.filter((g) => g.status === "final" && g.finalResult)) {
     const c = g.finalResult!.publicCovered;
@@ -89,7 +87,56 @@ async function runRefresh(opts: { hoursBack?: number; hoursForward?: number } = 
   await setStreak(streak);
 
   // Per-league × per-category (ATS + Total) streaks with separate emails.
+  // Use the locked, post-finalResult-attach data from `todays` (store-backed)
+  // — never the live `all` array, whose verdicts may be stale.
   const perLeague: Partial<Record<League, LeagueStreaks>> = { ...(store.streaks ?? {}) };
+  // One-time migration: stored Total streak history used to record winners
+  // as "over"/"under" and was further corrupted by the live-trend verdict
+  // bug. Drop any stale total streak so it rebuilds cleanly under the new
+  // public/vegas convention from the corrected stored finals.
+  for (const league of LEAGUES) {
+    const ls = perLeague[league];
+    if (!ls) continue;
+    const hasLegacy = ls.total.history.some(
+      (h) => (h.winner as string) === "over" || (h.winner as string) === "under",
+    );
+    const legacyCurrent = (ls.total.current as string | null) === "over"
+      || (ls.total.current as string | null) === "under";
+    if (hasLegacy || legacyCurrent) {
+      perLeague[league] = {
+        ...ls,
+        total: { current: null, count: 0, lastNotifiedCount: 0, history: [] },
+      };
+    }
+  }
+  // Rebuild totals streak forward from corrected finalResults so any games
+  // we already had stored (with the old buggy verdict) get re-counted with
+  // the fixed totalGoOver. ATS history stays as-is.
+  const finalsByDate = [...store.games]
+    .filter((g) => g.status === "final" && g.finalResult)
+    .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
+  for (const league of LEAGUES) {
+    const ls = perLeague[league];
+    if (!ls || ls.total.count !== 0) continue;
+    let rebuilt = ls;
+    for (const g of finalsByDate) {
+      if (g.league !== league) continue;
+      const day = etDateKeyOf(g.startTime);
+      const onlyTotal = applyGameToLeagueStreaks(
+        { ats: rebuilt.ats, total: rebuilt.total },
+        g,
+        day,
+      );
+      rebuilt = { ats: rebuilt.ats, total: onlyTotal.total };
+    }
+    // Mark the rebuilt count as already-notified so we don't blast a wave
+    // of historical milestone alerts during this migration tick.
+    rebuilt = {
+      ats: rebuilt.ats,
+      total: { ...rebuilt.total, lastNotifiedCount: rebuilt.total.count },
+    };
+    perLeague[league] = rebuilt;
+  }
   for (const g of todays.filter((g) => g.status === "final" && g.finalResult)) {
     const prev = getLeagueStreaks(perLeague, g.league);
     perLeague[g.league] = applyGameToLeagueStreaks(prev, g, today);

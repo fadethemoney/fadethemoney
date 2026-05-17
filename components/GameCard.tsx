@@ -1,6 +1,8 @@
 import type { Game, Side } from "@/lib/types";
-import { publicCovering, todayKey } from "@/lib/calc";
+import { publicCovering, publicCoveringTotal, todayKey } from "@/lib/calc";
 import { etDateKeyOf } from "@/lib/time";
+
+type Market = "ml" | "spread" | "total";
 
 const ET_TZ = "America/New_York";
 
@@ -34,11 +36,11 @@ function timeLabel(g: Game) {
   return `${date} · ${time} ET`;
 }
 
-export function GameCard({ game }: { game: Game }) {
+export function GameCard({ game, market = "spread" }: { game: Game; market?: Market }) {
   const t = game.trend;
   const favSide: Side | null = t?.pickedSide ?? null;
-  const covering = publicCovering(game);
   const isFinal = game.status === "final" && game.finalResult;
+  const covering = market === "total" ? publicCoveringTotal(game) : publicCovering(game);
 
   return (
     <article className="card">
@@ -83,15 +85,18 @@ export function GameCard({ game }: { game: Game }) {
           <span className="game-time">{timeLabel(game)}</span>
           {t && (
             <>
-              {" · "}Public: {favSide === "home" ? game.home.abbr : game.away.abbr}{" "}
-              {fmtSpread(favSide === "home" ? t.spread : -t.spread)}
+              {" · "}
+              {market === "total"
+                ? <>Public: OVER {t.total}</>
+                : <>Public: {favSide === "home" ? game.home.abbr : game.away.abbr}{" "}
+                    {fmtSpread(favSide === "home" ? t.spread : -t.spread)}</>}
             </>
           )}
         </span>
         <ResultPill game={game} covering={covering} />
       </div>
 
-      {isFinal && t && <ResultLine game={game} />}
+      {isFinal && t && <ResultLine game={game} market={market} />}
     </article>
   );
 }
@@ -135,10 +140,12 @@ function ResultPill({ game, covering }: { game: Game; covering: boolean | null }
   if (game.status === "scheduled") {
     return <span className="result-pill result-pending">Upcoming</span>;
   }
+  // Finals: `covering` is already market-aware (spread vs total) via the
+  // helper picked in GameCard, so we use it for finals too rather than
+  // hard-coding the spread verdict.
   if (game.status === "final" && game.finalResult) {
-    const c = game.finalResult.publicCovered;
-    if (c === true) return <span className="result-pill result-public">Public covered</span>;
-    if (c === false) return <span className="result-pill result-vegas">Vegas covered</span>;
+    if (covering === true) return <span className="result-pill result-public">Public covered</span>;
+    if (covering === false) return <span className="result-pill result-vegas">Vegas covered</span>;
     return <span className="result-pill result-pending">Push</span>;
   }
   if (covering === true) return <span className="result-pill result-public">Public covering</span>;
@@ -146,9 +153,19 @@ function ResultPill({ game, covering }: { game: Game; covering: boolean | null }
   return <span className="result-pill result-pending">Push</span>;
 }
 
-function ResultLine({ game }: { game: Game }) {
+function ResultLine({ game, market }: { game: Game; market: Market }) {
   const r = game.finalResult!;
   const t = game.trend!;
+  if (market === "total") {
+    if (r.totalGoOver === null) {
+      return <div className="card-resultline">— Total push {t.total}</div>;
+    }
+    const publicWon = r.totalGoOver; // public = OVER
+    const overUnder = r.totalGoOver ? "OVER" : "UNDER";
+    return publicWon
+      ? <div className="card-resultline public">✓ <em>Public covered</em> · Total {overUnder} {t.total}</div>
+      : <div className="card-resultline">✗ <em>Vegas covered</em> · Total {overUnder} {t.total}</div>;
+  }
   const covered = r.publicCovered;
   const totalText =
     r.totalGoOver === null

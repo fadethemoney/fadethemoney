@@ -126,9 +126,16 @@ export async function upsertGames(incoming: Game[]): Promise<DataStore> {
     // any further updates. Status alone isn't reliable — feeds can flip
     // scheduled→live late, by which point the incoming line is already
     // live-adjusted.
-    const started = Number.isFinite(new Date(g.startTime).getTime())
-      && new Date(g.startTime).getTime() <= now;
-    const lockedTrend = started && existing?.trend ? existing.trend : g.trend;
+    //
+    // If a game first appears in our store after kickoff (no prior trend
+    // snapshot exists), we deliberately leave trend `undefined` rather
+    // than accept the live line. A game with no captured pregame line
+    // can't be scored fairly against public/Vegas, so it's excluded from
+    // streaks and from the verdict pill on the dashboard.
+    const startMs = new Date(g.startTime).getTime();
+    const started = Number.isFinite(startMs) && startMs <= now;
+    let lockedTrend = existing?.trend ?? g.trend;
+    if (started && !existing?.trend) lockedTrend = undefined;
     map.set(g.id, { ...existing, ...g, trend: lockedTrend });
   }
   store.games = Array.from(map.values()).sort(

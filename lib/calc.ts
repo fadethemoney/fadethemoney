@@ -25,6 +25,33 @@ export function statusLabel(game: Game): "Public Winning" | "Vegas Winning" | "P
   return c ? "Public Winning" : "Vegas Winning";
 }
 
+/**
+ * Same idea as `publicCovering` but for the total (over/under) market.
+ * Convention: Public = OVER, Vegas = UNDER (see TotalWinner in lib/types.ts).
+ *
+ * Returns true if the public side (Over) is currently winning the total,
+ * false if Vegas (Under) is, null on push / no data.
+ *
+ * For live games this compares the running total to the locked pregame O/U,
+ * so it answers "is this game already over the number?" — which on a live
+ * card is the closest we have to "is the public-side bet looking good."
+ */
+export function publicCoveringTotal(game: Game): boolean | null {
+  if (!game.trend) return null;
+  if (game.status !== "live" && game.status !== "final") return null;
+  const homeScore = game.home.score ?? 0;
+  const awayScore = game.away.score ?? 0;
+  const total = homeScore + awayScore;
+  if (game.status === "final") {
+    if (total === game.trend.total) return null;
+    return total > game.trend.total;
+  }
+  // Live: once the running total has cleared the line, Over is a lock.
+  // Until then we don't claim either side — too early to tell.
+  if (total > game.trend.total) return true;
+  return null;
+}
+
 import { etDateKey } from "./time";
 
 /** Today in US Eastern time, as "YYYY-MM-DD". */

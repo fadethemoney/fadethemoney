@@ -36,7 +36,7 @@ export function GamesSection({ label, games }: { label: string; games: Game[] })
       </div>
 
       <div className="games-grid">
-        {games.map((g) => <GameCard key={g.id} game={g} />)}
+        {games.map((g) => <GameCard key={g.id} game={g} market={market} />)}
       </div>
     </section>
   );
