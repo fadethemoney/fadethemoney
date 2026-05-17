@@ -39,8 +39,9 @@ export async function notifyAdmin(opts: NotifyOptions): Promise<NotifyResult> {
        <p>${escapeHtml(opts.text).replace(/\n/g, "<br>")}</p>
        <hr style="border:0;border-top:1px solid #ddd;margin:24px 0">
        <p style="font-size:12px;color:#888">
-         You're getting this because a Public/Vegas betting trend streak hit a notify threshold.
-         Spreads use favorite = Public, dog = Vegas. Totals use Over = Public, Under = Vegas.
+         You're getting this because a betting trend streak hit a notify threshold.
+         Spreads use favorite = Public, dog = Vegas. Totals track the side of the
+         total that won (OVER or UNDER) plus which side was favored by the juice.
          Reply STOP to unsubscribe (admin alert — automated).
        </p>
      </div>`;

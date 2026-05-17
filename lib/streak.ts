@@ -68,8 +68,7 @@ export function applyGameToLeagueStreaks(
 
   const over = game.finalResult.totalGoOver;
   if (over !== null) {
-    // Public = OVER, Vegas = UNDER (see TotalWinner in lib/types.ts).
-    const w: TotalWinner = over ? "public" : "vegas";
+    const w: TotalWinner = over ? "over" : "under";
     const updated = applyWinner(next.total, game, w, today);
     if (updated) next = { ...next, total: updated };
   }
@@ -116,17 +115,16 @@ function buildLines<W extends string>(
       const outcome = h.winner === "public" ? "PUBLIC WIN ✓" : "VEGAS WIN ✗";
       return `• ${g.league.toUpperCase()} — ${matchup}${score} — ${publicLabel} → ${outcome}`;
     }
-    // Totals: public = OVER, vegas = UNDER. Show the locked pregame total and
-    // which side (over/under) won relative to it, plus the public/Vegas verdict.
+    // Totals: track which side of the total won. Show the locked pregame O/U,
+    // the final combined score, and which side cleared.
     const total = g.trend?.total;
     const totalStr = typeof total === "number" ? ` ${total}` : "";
     const score =
       typeof g.home.score === "number" && typeof g.away.score === "number"
         ? ` ${g.away.score}-${g.home.score}`
         : "";
-    const overUnder = h.winner === "public" ? "OVER" : "UNDER";
-    const outcome = h.winner === "public" ? "PUBLIC WIN ✓" : "VEGAS WIN ✗";
-    return `• ${g.league.toUpperCase()} — ${matchup}${score} — Public: OVER${totalStr} → ${overUnder}${totalStr} (${outcome})`;
+    const overUnder = h.winner === "over" ? "OVER" : "UNDER";
+    return `• ${g.league.toUpperCase()} — ${matchup}${score} — Total${totalStr} → ${overUnder} ✓`;
   });
 }
 
@@ -165,11 +163,11 @@ export function buildTotalEmails(
   const start = Math.max(2, streak.lastNotifiedCount + 1);
   for (let n = start; n <= streak.count; n++) {
     const side = streak.current?.toUpperCase();
-    const header = `${league.toUpperCase()} TOTAL — ${side} has won ${n} totals in a row (Public = OVER, Vegas = UNDER).`;
+    const header = `${league.toUpperCase()} TOTAL — ${side} has won ${n} totals in a row.`;
     out.push({
       league,
       category: "total",
-      subject: `Fade The Money — ${league.toUpperCase()} ${streak.current} on a ${n}-total streak`,
+      subject: `Fade The Money — ${league.toUpperCase()} ${side} on a ${n}-total streak`,
       text: [header, "", ...buildLines("total", streak, gamesById, n)].join("\n"),
       newLastNotifiedCount: n,
     });

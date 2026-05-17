@@ -1,5 +1,5 @@
 import type { Game, Side } from "@/lib/types";
-import { publicCovering, publicCoveringTotal, todayKey } from "@/lib/calc";
+import { publicCovering, totalGoingOver, totalFavoriteSide, todayKey } from "@/lib/calc";
 import { etDateKeyOf } from "@/lib/time";
 
 type Market = "ml" | "spread" | "total";
@@ -39,8 +39,10 @@ function timeLabel(g: Game) {
 export function GameCard({ game, market = "spread" }: { game: Game; market?: Market }) {
   const t = game.trend;
   const favSide: Side | null = t?.pickedSide ?? null;
+  const totalFav = totalFavoriteSide(t); // "over" | "under" | null
   const isFinal = game.status === "final" && game.finalResult;
-  const covering = market === "total" ? publicCoveringTotal(game) : publicCovering(game);
+  const totalOver = totalGoingOver(game);
+  const covering = market === "total" ? totalOver : publicCovering(game);
 
   return (
     <article className="card">
@@ -61,6 +63,7 @@ export function GameCard({ game, market = "spread" }: { game: Game; market?: Mar
             spreadOdds={t.spreadOddsAway}
             totalLabel={`o ${t.total}`}
             totalOdds={t.totalOddsOver}
+            totalIsFavorite={totalFav === "over"}
           />
           <OddsRow
             team={game.home}
@@ -70,6 +73,7 @@ export function GameCard({ game, market = "spread" }: { game: Game; market?: Mar
             spreadOdds={t.spreadOddsHome}
             totalLabel={`u ${t.total}`}
             totalOdds={t.totalOddsUnder}
+            totalIsFavorite={totalFav === "under"}
           />
         </div>
       ) : (
@@ -87,13 +91,13 @@ export function GameCard({ game, market = "spread" }: { game: Game; market?: Mar
             <>
               {" · "}
               {market === "total"
-                ? <>Public: OVER {t.total}</>
+                ? <>Favorite: {totalFav ? totalFav.toUpperCase() : "—"} {t.total}</>
                 : <>Public: {favSide === "home" ? game.home.abbr : game.away.abbr}{" "}
                     {fmtSpread(favSide === "home" ? t.spread : -t.spread)}</>}
             </>
           )}
         </span>
-        <ResultPill game={game} covering={covering} />
+        <ResultPill game={game} covering={covering} market={market} />
       </div>
 
       {isFinal && t && <ResultLine game={game} market={market} />}
@@ -102,12 +106,13 @@ export function GameCard({ game, market = "spread" }: { game: Game; market?: Mar
 }
 
 function OddsRow({
-  team, isFavorite, ml, spread, spreadOdds, totalLabel, totalOdds,
+  team, isFavorite, ml, spread, spreadOdds, totalLabel, totalOdds, totalIsFavorite,
 }: {
   team: Game["home"]; isFavorite: boolean;
   ml: string | null;
   spread: string; spreadOdds: string | null;
   totalLabel: string; totalOdds: string | null;
+  totalIsFavorite: boolean;
 }) {
   return (
     <div className={`odds-row${isFavorite ? " is-public" : ""}`}>
@@ -120,7 +125,10 @@ function OddsRow({
       <span className="or-cell or-line" data-market="ml">{fmtOdds(ml)}</span>
       <span className="or-cell or-line" data-market="spread">{spread}</span>
       <span className="or-cell or-line" data-market="spread">{fmtOdds(spreadOdds)}</span>
-      <span className="or-cell or-line" data-market="total">{totalLabel}</span>
+      <span className="or-cell or-line" data-market="total">
+        {totalLabel}
+        {totalIsFavorite && <span className="pub-tag" style={{ marginLeft: 6 }}>Fav</span>}
+      </span>
       <span className="or-cell or-line" data-market="total">{fmtOdds(totalOdds)}</span>
     </div>
   );
@@ -136,13 +144,22 @@ function TeamLine({ team }: { team: Game["home"] }) {
   );
 }
 
-function ResultPill({ game, covering }: { game: Game; covering: boolean | null }) {
+function ResultPill({ game, covering, market }: { game: Game; covering: boolean | null; market: Market }) {
   if (game.status === "scheduled") {
     return <span className="result-pill result-pending">Upcoming</span>;
   }
-  // Finals: `covering` is already market-aware (spread vs total) via the
-  // helper picked in GameCard, so we use it for finals too rather than
-  // hard-coding the spread verdict.
+  if (market === "total") {
+    // covering here is `totalGoingOver`: true = OVER, false = UNDER
+    const live = game.status === "live";
+    if (game.status === "final" && game.finalResult) {
+      if (covering === true) return <span className="result-pill result-public">OVER won</span>;
+      if (covering === false) return <span className="result-pill result-vegas">UNDER won</span>;
+      return <span className="result-pill result-pending">Push</span>;
+    }
+    if (covering === true) return <span className="result-pill result-public">{live ? "OVER hit" : "OVER winning"}</span>;
+    if (covering === false) return <span className="result-pill result-vegas">UNDER winning</span>;
+    return <span className="result-pill result-pending">In play</span>;
+  }
   if (game.status === "final" && game.finalResult) {
     if (covering === true) return <span className="result-pill result-public">Public covered</span>;
     if (covering === false) return <span className="result-pill result-vegas">Vegas covered</span>;
@@ -160,11 +177,13 @@ function ResultLine({ game, market }: { game: Game; market: Market }) {
     if (r.totalGoOver === null) {
       return <div className="card-resultline">— Total push {t.total}</div>;
     }
-    const publicWon = r.totalGoOver; // public = OVER
-    const overUnder = r.totalGoOver ? "OVER" : "UNDER";
-    return publicWon
-      ? <div className="card-resultline public">✓ <em>Public covered</em> · Total {overUnder} {t.total}</div>
-      : <div className="card-resultline">✗ <em>Vegas covered</em> · Total {overUnder} {t.total}</div>;
+    const fav = totalFavoriteSide(t);
+    const overUnder: "over" | "under" = r.totalGoOver ? "over" : "under";
+    const favWon = fav !== null && fav === overUnder;
+    const favTag = fav ? ` · Favorite was ${fav.toUpperCase()}` : "";
+    return favWon
+      ? <div className="card-resultline public">✓ <em>{overUnder.toUpperCase()} won</em> · Total {t.total}{favTag}</div>
+      : <div className="card-resultline">✓ <em>{overUnder.toUpperCase()} won</em> · Total {t.total}{favTag}</div>;
   }
   const covered = r.publicCovered;
   const totalText =
