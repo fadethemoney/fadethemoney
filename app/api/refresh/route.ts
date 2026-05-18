@@ -73,15 +73,12 @@ async function runRefresh(opts: { hoursBack?: number; hoursForward?: number } = 
     streak.history.unshift({ date: `${today}:${g.id}`, winner });
   }
   streak.history = streak.history.slice(0, 50);
-  if (streak.count >= 2 && streak.count > streak.lastNotifiedCount) {
-    try {
-      await notifyAdmin({
-        subject: `Fade The Money — ${streak.current} on a ${streak.count}-game streak`,
-        text: `${streak.current} has won ${streak.count} bets in a row.`,
-      });
-    } catch (e) {
-      console.warn("[refresh] notifyAdmin failed:", (e as Error).message);
-    }
+  // The detail-less global streak email ("vegas has won 2 bets in a row.")
+  // was retired per client direction — the per-league emails below already
+  // produce a properly formatted alert with team names, scores, and outcome.
+  // We still maintain the streak counter itself so the homepage hero eyebrow
+  // and StreakBanner keep working.
+  if (streak.count > streak.lastNotifiedCount) {
     streak.lastNotifiedCount = streak.count;
   }
   await setStreak(streak);
