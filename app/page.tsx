@@ -12,6 +12,7 @@ export const revalidate = 0;
 
 const LEAGUE_LABEL: Record<string, string> = {
   nba: "NBA",
+  wnba: "WNBA",
   mlb: "MLB",
   nfl: "NFL",
   nhl: "NHL",

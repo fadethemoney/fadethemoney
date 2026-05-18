@@ -3,6 +3,7 @@ import Link from "next/link";
 const LEAGUES = [
   { slug: "", label: "All" },
   { slug: "nba", label: "NBA" },
+  { slug: "wnba", label: "WNBA" },
   { slug: "mlb", label: "MLB" },
   { slug: "nfl", label: "NFL" },
   { slug: "nhl", label: "NHL" },

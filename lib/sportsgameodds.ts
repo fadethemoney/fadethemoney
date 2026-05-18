@@ -14,6 +14,7 @@ const BASE = "https://api.sportsgameodds.com/v2";
 
 const LEAGUE_TO_API: Record<League, string> = {
   nba: "NBA",
+  wnba: "WNBA",
   mlb: "MLB",
   nfl: "NFL",
   nhl: "NHL",

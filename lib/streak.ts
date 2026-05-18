@@ -8,7 +8,7 @@ import type {
   TotalWinner,
 } from "./types";
 
-export const LEAGUES_ALL: League[] = ["nba", "mlb", "nfl", "nhl"];
+export const LEAGUES_ALL: League[] = ["nba", "wnba", "mlb", "nfl", "nhl"];
 
 function emptyCategory<W extends string>(): CategoryStreak<W> {
   return { current: null, count: 0, lastNotifiedCount: 0, history: [] };

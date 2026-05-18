@@ -25,7 +25,7 @@ import {
 } from "../lib/streak";
 import type { League, LeagueStreaks, StreakState } from "../lib/types";
 
-const LEAGUES: League[] = ["nba", "mlb", "nfl", "nhl"];
+const LEAGUES: League[] = ["nba", "wnba", "mlb", "nfl", "nhl"];
 
 async function run() {
   const fetched = await fetchAllGames(LEAGUES);

@@ -15,7 +15,7 @@ import type { League, LeagueStreaks, StreakState } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-const LEAGUES: League[] = ["nba", "mlb", "nfl", "nhl"];
+const LEAGUES: League[] = ["nba", "wnba", "mlb", "nfl", "nhl"];
 
 async function runRefresh(opts: { hoursBack?: number; hoursForward?: number } = {}) {
   const fetchErrors: LeagueFetchError[] = [];
