@@ -13,7 +13,12 @@ function parseAmerican(s: string | null | undefined): number | null {
 /**
  * Which side of the total is the favorite per the juice on Over vs Under.
  * Whichever side has the shorter (more negative) price is the implied favorite.
- * Returns null if either price is missing or they're equal.
+ *
+ * On a pick'em total (equal prices, e.g. -110/-110) we default to OVER per
+ * client direction — the book is calling it even, but the product needs a
+ * favorite shown on every game.
+ *
+ * Returns null only when prices are missing entirely.
  */
 export function totalFavoriteSide(
   trend: Pick<BettingTrend, "totalOddsOver" | "totalOddsUnder"> | undefined | null,
@@ -22,7 +27,7 @@ export function totalFavoriteSide(
   const over = parseAmerican(trend.totalOddsOver);
   const under = parseAmerican(trend.totalOddsUnder);
   if (over === null || under === null) return null;
-  if (over === under) return null;
+  if (over === under) return "over";
   return over < under ? "over" : "under";
 }
 
