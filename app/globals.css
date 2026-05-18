@@ -218,11 +218,12 @@ header.site {
 
 .section-label {
   font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.16em;
-  color: var(--text-muted);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--text);
   text-transform: uppercase;
-  padding: 18px 0 14px;
+  padding: 22px 0 16px;
 }
 .empty-state {
   background: var(--surface);
@@ -294,11 +295,12 @@ header.site {
 }
 .odds-grid-head {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 12px;
+  font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--text-muted);
-  border: 1px solid var(--border);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
   border-bottom: 0;
   background: var(--bg-section);
   border-top-left-radius: 8px;
