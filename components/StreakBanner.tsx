@@ -18,7 +18,7 @@ export function StreakBanner({ streak }: { streak: StreakState }) {
         <span className="streak-label">Active streak</span>
         <span className="streak-text">
           <strong className={favs ? "" : "vegas"}>
-            {favs ? "Favorites" : "Underdogs"}
+            {favs ? "Public" : "Vegas"}
           </strong>{" "}
           on a {streak.count}-game ATS run
         </span>
