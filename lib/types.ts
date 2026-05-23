@@ -69,12 +69,13 @@ export interface StreakState {
 export type BetCategory = "ats" | "total";
 
 export type AtsWinner = "public" | "vegas";
-// Totals streak tracks the side of the total that won, not a public/vegas
-// proxy. "over" = combined score cleared the line; "under" = it didn't.
-// The favorite side of the total (over or under) is derived separately from
-// the juice on totalOddsOver / totalOddsUnder — see totalFavoriteSide in
-// lib/calc.ts.
-export type TotalWinner = "over" | "under";
+// Totals streak tracks favorite-vs-dog on the total, NOT over-vs-under — the
+// client cares whether the juice-favorite side keeps winning, not whether the
+// game went Over five nights running. The favorite side of the total (over or
+// under) is the juice favorite from totalOddsOver / totalOddsUnder — see
+// totalFavoriteSide in lib/calc.ts. "public" = favorite side won; "vegas" =
+// dog side won. Same shape as AtsWinner so spreads + totals read identically.
+export type TotalWinner = "public" | "vegas";
 
 export interface CategoryStreak<W extends string> {
   current: W | null;

@@ -7,6 +7,7 @@ import type {
   LeagueStreaks,
   TotalWinner,
 } from "./types";
+import { totalFavoriteSide } from "./calc";
 
 export const LEAGUES_ALL: League[] = ["nba", "wnba", "mlb", "nfl", "nhl"];
 
@@ -66,9 +67,13 @@ export function applyGameToLeagueStreaks(
     if (updated) next = { ...next, ats: updated };
   }
 
+  // Totals streak: track whether the juice-favorite side of the total won,
+  // not whether it was Over or Under. Favorite covered → "public"; dog → "vegas".
   const over = game.finalResult.totalGoOver;
-  if (over !== null) {
-    const w: TotalWinner = over ? "over" : "under";
+  const totalFav = totalFavoriteSide(game.trend);
+  if (over !== null && totalFav !== null) {
+    const favWon = totalFav === (over ? "over" : "under");
+    const w: TotalWinner = favWon ? "public" : "vegas";
     const updated = applyWinner(next.total, game, w, today);
     if (updated) next = { ...next, total: updated };
   }
@@ -115,16 +120,18 @@ function buildLines<W extends string>(
       const outcome = h.winner === "public" ? "PUBLIC WIN ✓" : "VEGAS WIN ✗";
       return `• ${g.league.toUpperCase()} — ${matchup}${score} — ${publicLabel} → ${outcome}`;
     }
-    // Totals: track which side of the total won. Show the locked pregame O/U,
-    // the final combined score, and which side cleared.
+    // Totals: track whether the juice-favorite side of the total won. Show the
+    // locked pregame O/U, the favorite side, the final score, and the outcome.
     const total = g.trend?.total;
     const totalStr = typeof total === "number" ? ` ${total}` : "";
+    const fav = totalFavoriteSide(g.trend);
+    const favStr = fav ? `, Fav ${fav.toUpperCase()}` : "";
     const score =
       typeof g.home.score === "number" && typeof g.away.score === "number"
         ? ` ${g.away.score}-${g.home.score}`
         : "";
-    const overUnder = h.winner === "over" ? "OVER" : "UNDER";
-    return `• ${g.league.toUpperCase()} — ${matchup}${score} — Total${totalStr} → ${overUnder} ✓`;
+    const outcome = h.winner === "public" ? "PUBLIC WIN ✓" : "VEGAS WIN ✗";
+    return `• ${g.league.toUpperCase()} — ${matchup}${score} — Total${totalStr}${favStr} → ${outcome}`;
   });
 }
 
@@ -167,7 +174,7 @@ export function buildTotalEmails(
     out.push({
       league,
       category: "total",
-      subject: `Fade The Money — ${league.toUpperCase()} ${side} on a ${n}-total streak`,
+      subject: `Fade The Money — ${league.toUpperCase()} ${side} on a ${n}-total streak (totals)`,
       text: [header, "", ...buildLines("total", streak, gamesById, n)].join("\n"),
       newLastNotifiedCount: n,
     });
