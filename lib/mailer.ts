@@ -18,7 +18,7 @@ export interface NotifyResult {
  *
  * Required env vars:
  *   RESEND_API_KEY  — from https://resend.com/api-keys
- *   ADMIN_EMAIL     — recipient
+ *   ADMIN_EMAIL     — recipient(s); comma-separated for multiple
  *
  * Optional:
  *   ALERT_FROM      — sender (defaults to "Fade The Money <onboarding@resend.dev>",
@@ -33,6 +33,7 @@ export async function notifyAdmin(opts: NotifyOptions): Promise<NotifyResult> {
 
   const resend = new Resend(RESEND_API_KEY);
   const from = ALERT_FROM ?? "Fade The Money <onboarding@resend.dev>";
+  const recipients = ADMIN_EMAIL.split(",").map((e) => e.trim()).filter(Boolean);
   const html =
     opts.html ??
     `<div style="font-family:-apple-system,Segoe UI,sans-serif;max-width:540px">
@@ -49,7 +50,7 @@ export async function notifyAdmin(opts: NotifyOptions): Promise<NotifyResult> {
   try {
     const res = await resend.emails.send({
       from,
-      to: ADMIN_EMAIL,
+      to: recipients,
       subject: opts.subject,
       text: opts.text,
       html,
@@ -58,7 +59,7 @@ export async function notifyAdmin(opts: NotifyOptions): Promise<NotifyResult> {
       console.error("[mailer] Resend error:", res.error);
       return { ok: false, error: JSON.stringify(res.error) };
     }
-    console.log("[mailer] sent:", res.data?.id, "→", ADMIN_EMAIL);
+    console.log("[mailer] sent:", res.data?.id, "→", recipients.join(", "));
     return { ok: true, id: res.data?.id };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
