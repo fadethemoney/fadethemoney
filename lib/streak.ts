@@ -8,6 +8,7 @@ import type {
   TotalWinner,
 } from "./types";
 import { totalFavoriteSide } from "./calc";
+import { etKickoffLabel } from "./time";
 
 export const LEAGUES_ALL: League[] = ["nba", "wnba", "mlb", "nfl", "nhl"];
 
@@ -136,6 +137,44 @@ function buildLines<W extends string>(
 }
 
 /**
+ * Format the "Next up" line for an email: the next scheduled game in the
+ * league that has NOT started yet, with its Public/favorite side. For ATS we
+ * show the favored team + spread; for totals the locked O/U + favorite side.
+ * Returns null when there is no upcoming game to show.
+ */
+function nextGameLine(category: BetCategory, g: Game | null | undefined): string | null {
+  if (!g) return null;
+  const matchup = `${g.away.abbr} @ ${g.home.abbr}`;
+  const when = ` (${etKickoffLabel(g.startTime)})`;
+  if (category === "ats") {
+    const favSide = g.trend?.pickedSide;
+    const fav = favSide === "home" ? g.home : favSide === "away" ? g.away : null;
+    const homeSpread = g.trend?.spread;
+    const favSpread =
+      typeof homeSpread === "number" && favSide
+        ? favSide === "home"
+          ? homeSpread
+          : -homeSpread
+        : null;
+    const publicLabel = fav
+      ? `Public: ${fav.abbr}${favSpread !== null ? ` ${favSpread > 0 ? "+" : ""}${favSpread}` : ""}`
+      : "Public: —";
+    return `Next up: ${g.league.toUpperCase()} — ${matchup}${when} — ${publicLabel}`;
+  }
+  const total = g.trend?.total;
+  const totalStr = typeof total === "number" ? ` ${total}` : "";
+  const fav = totalFavoriteSide(g.trend);
+  const favStr = fav ? `, Fav ${fav.toUpperCase()}` : "";
+  return `Next up: ${g.league.toUpperCase()} — ${matchup}${when} — Total${totalStr}${favStr}`;
+}
+
+function withNextGame(lines: string[], category: BetCategory, nextGame: Game | null | undefined): string {
+  const next = nextGameLine(category, nextGame);
+  const tail = next ? ["", next] : ["", "Next up: no upcoming game scheduled yet."];
+  return [...lines, ...tail].join("\n");
+}
+
+/**
  * Emit one email per milestone (2, 3, 4, …) between lastNotifiedCount+1 and
  * streak.count. If multiple games finalize between cron ticks and the streak
  * jumps several steps at once, every milestone still gets its own alert.
@@ -144,6 +183,7 @@ export function buildAtsEmails(
   league: League,
   streak: CategoryStreak<AtsWinner>,
   gamesById: Map<string, Game>,
+  nextGame?: Game | null,
 ): StreakEmail[] {
   const out: StreakEmail[] = [];
   const start = Math.max(2, streak.lastNotifiedCount + 1);
@@ -154,7 +194,7 @@ export function buildAtsEmails(
       league,
       category: "ats",
       subject: `Fade The Money — ${league.toUpperCase()} ${streak.current} on a ${n}-game spread streak`,
-      text: [header, "", ...buildLines("ats", streak, gamesById, n)].join("\n"),
+      text: withNextGame([header, "", ...buildLines("ats", streak, gamesById, n)], "ats", nextGame),
       newLastNotifiedCount: n,
     });
   }
@@ -165,6 +205,7 @@ export function buildTotalEmails(
   league: League,
   streak: CategoryStreak<TotalWinner>,
   gamesById: Map<string, Game>,
+  nextGame?: Game | null,
 ): StreakEmail[] {
   const out: StreakEmail[] = [];
   const start = Math.max(2, streak.lastNotifiedCount + 1);
@@ -175,9 +216,22 @@ export function buildTotalEmails(
       league,
       category: "total",
       subject: `Fade The Money — ${league.toUpperCase()} ${side} on a ${n}-total streak (totals)`,
-      text: [header, "", ...buildLines("total", streak, gamesById, n)].join("\n"),
+      text: withNextGame([header, "", ...buildLines("total", streak, gamesById, n)], "total", nextGame),
       newLastNotifiedCount: n,
     });
   }
   return out;
+}
+
+/**
+ * The next scheduled game in a league that has NOT started yet, by earliest
+ * start time. Excludes live/final games — the client wants the next game
+ * "about to start, not any game that has already started."
+ */
+export function findNextGame(games: Game[], league: League, now = Date.now()): Game | null {
+  const upcoming = games
+    .filter((g) => g.league === league && g.status === "scheduled")
+    .filter((g) => new Date(g.startTime).getTime() > now)
+    .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
+  return upcoming[0] ?? null;
 }

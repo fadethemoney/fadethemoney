@@ -9,6 +9,7 @@ import {
   applyGameToLeagueStreaks,
   buildAtsEmails,
   buildTotalEmails,
+  findNextGame,
   getLeagueStreaks,
 } from "@/lib/streak";
 import type { League, LeagueStreaks, StreakState } from "@/lib/types";
@@ -115,7 +116,8 @@ async function runRefresh(opts: { hoursBack?: number; hoursForward?: number } = 
   for (const league of LEAGUES) {
     const ls = perLeague[league];
     if (!ls) continue;
-    for (const email of buildAtsEmails(league, ls.ats, gameByIdPer)) {
+    const nextGame = findNextGame(afterPer.games, league);
+    for (const email of buildAtsEmails(league, ls.ats, gameByIdPer, nextGame)) {
       try {
         await notifyAdmin({ subject: email.subject, text: email.text });
       } catch (e) {
@@ -123,7 +125,7 @@ async function runRefresh(opts: { hoursBack?: number; hoursForward?: number } = 
       }
       ls.ats = { ...ls.ats, lastNotifiedCount: email.newLastNotifiedCount };
     }
-    for (const email of buildTotalEmails(league, ls.total, gameByIdPer)) {
+    for (const email of buildTotalEmails(league, ls.total, gameByIdPer, nextGame)) {
       try {
         await notifyAdmin({ subject: email.subject, text: email.text });
       } catch (e) {

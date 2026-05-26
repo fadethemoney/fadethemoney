@@ -28,3 +28,17 @@ export function etDateKey(d: Date = new Date()): string {
 export function etDateKeyOf(iso: string): string {
   return etDateKey(new Date(iso));
 }
+
+/**
+ * Human-friendly ET kickoff label for emails, e.g. "Tue 7:35 PM ET".
+ * Used in streak alerts to show when the next game starts.
+ */
+export function etKickoffLabel(iso: string): string {
+  const fmt = new Intl.DateTimeFormat("en-US", {
+    timeZone: ET_TZ,
+    weekday: "short",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+  return `${fmt.format(new Date(iso))} ET`;
+}
