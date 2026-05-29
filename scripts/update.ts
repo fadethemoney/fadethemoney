@@ -22,6 +22,7 @@ import {
   buildAtsEmails,
   buildTotalEmails,
   getLeagueStreaks,
+  MIN_NOTIFY_COUNT,
 } from "../lib/streak";
 import type { League, LeagueStreaks, StreakState } from "../lib/types";
 
@@ -68,7 +69,7 @@ async function run() {
   }
   streak.history = streak.history.slice(0, 50);
 
-  if (streak.count >= 2 && streak.count > streak.lastNotifiedCount) {
+  if (streak.count >= MIN_NOTIFY_COUNT && streak.count > streak.lastNotifiedCount) {
     const after = await readStore();
     const gameById = new Map(after.games.map((g) => [g.id, g]));
     const contributing = streak.history.slice(0, streak.count);
