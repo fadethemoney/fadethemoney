@@ -312,6 +312,113 @@ export async function fetchLeagueGames(
   return games;
 }
 
+/**
+ * Build a pregame-locked trend from the OPENING line only.
+ *
+ * Backfill-only. On a FINAL event, `bookSpread`/`bookOverUnder` carry the LAST
+ * live-updated line — a 13-3 blowout reports bookSpread +9.5 / total 16.5 — so
+ * they must never grade a historical game. The `open*` fields preserve the true
+ * pregame number; we lock and score against those.
+ */
+function openingTrendFromOdds(ev: ApiEvent): BettingTrend | undefined {
+  const spHome = findOdd(ev.odds, "sp", "home");
+  const spAway = findOdd(ev.odds, "sp", "away");
+  const ouOver = findOdd(ev.odds, "ou", "over");
+  const ouUnder = findOdd(ev.odds, "ou", "under");
+  const mlHome = findOdd(ev.odds, "ml", "home");
+  const mlAway = findOdd(ev.odds, "ml", "away");
+
+  const spread =
+    parseNum(spHome?.openBookSpread) ??
+    parseNum(spHome?.openFairSpread) ??
+    (parseNum(spAway?.openBookSpread) !== null ? -(parseNum(spAway!.openBookSpread)!) : null) ??
+    (parseNum(spAway?.openFairSpread) !== null ? -(parseNum(spAway!.openFairSpread)!) : null);
+  const total =
+    parseNum(ouOver?.openBookOverUnder) ?? parseNum(ouOver?.openFairOverUnder);
+  if (spread === null || total === null) return undefined;
+
+  const pickedSide: Side = spread <= 0 ? "home" : "away";
+  return {
+    spread,
+    total,
+    mlOddsHome: fmtAmerican(mlHome?.openBookOdds ?? mlHome?.openFairOdds),
+    mlOddsAway: fmtAmerican(mlAway?.openBookOdds ?? mlAway?.openFairOdds),
+    spreadOddsHome: fmtAmerican(spHome?.openBookOdds ?? spHome?.openFairOdds),
+    spreadOddsAway: fmtAmerican(spAway?.openBookOdds ?? spAway?.openFairOdds),
+    totalOddsOver: fmtAmerican(ouOver?.openBookOdds ?? ouOver?.openFairOdds),
+    totalOddsUnder: fmtAmerican(ouUnder?.openBookOdds ?? ouUnder?.openFairOdds),
+    pickedSide,
+    openingSpread: spread,
+    openingTotal: total,
+    source: "sportsgameodds",
+    trendUpdatedAt: new Date().toISOString(),
+  };
+}
+
+/**
+ * Backfill builder: only FINAL events that have both an opening line and a final
+ * score, graded against the opening (pregame) line. Returns null for anything
+ * that can't be fairly scored.
+ */
+function toHistoricalGame(ev: ApiEvent, league: League): Game | null {
+  if (ev.status?.cancelled) return null;
+  if (ev.type && ev.type !== "match") return null;
+  if (pickStatus(ev.status) !== "final") return null;
+  const startTime = ev.status?.startsAt;
+  if (!startTime) return null;
+
+  const home = teamFrom(ev.teams?.home, "HOME");
+  const away = teamFrom(ev.teams?.away, "AWAY");
+  const homePts = ev.teams?.home?.score ?? ev.results?.game?.home?.points;
+  const awayPts = ev.teams?.away?.score ?? ev.results?.game?.away?.points;
+  if (typeof homePts !== "number" || typeof awayPts !== "number") return null;
+  home.score = homePts;
+  away.score = awayPts;
+
+  const trend = openingTrendFromOdds(ev);
+  if (!trend) return null;
+
+  return {
+    id: ev.eventID,
+    league,
+    startTime,
+    status: "final",
+    period: pickPeriod(ev.status),
+    home,
+    away,
+    trend,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+/**
+ * Backfill fetch: historical FINAL games for one league across an explicit
+ * [startsAfter, startsBefore] window, graded against the opening line. Uses the
+ * Pro plan's historical-data access. Callers chunk wide ranges so a single call
+ * stays under the events pagination cap.
+ */
+export async function fetchLeagueGamesHistorical(
+  league: League,
+  startsAfter: string,
+  startsBefore: string,
+): Promise<Game[]> {
+  const params = new URLSearchParams({
+    apiKey: apiKey(),
+    leagueID: LEAGUE_TO_API[league],
+    type: "match",
+    startsAfter,
+    startsBefore,
+    limit: "100",
+  });
+  const events = await fetchEvents(params, 1000);
+  const games: Game[] = [];
+  for (const ev of events) {
+    const g = toHistoricalGame(ev, league);
+    if (g) games.push(g);
+  }
+  return games;
+}
+
 export interface LeagueFetchError {
   league: League;
   message: string;
