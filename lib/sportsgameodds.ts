@@ -103,9 +103,21 @@ interface ApiResponse {
   nextCursor?: string | null;
 }
 
-async function fetchPage(params: URLSearchParams): Promise<ApiResponse> {
+const MAX_429_RETRIES = 2;
+
+async function fetchPage(
+  params: URLSearchParams,
+  attempt = 0,
+): Promise<ApiResponse> {
   const url = `${BASE}/events/?${params.toString()}`;
   const res = await fetch(url, { cache: "no-store" });
+  // The API returns 429 with no Retry-After header; back off briefly and retry
+  // so a transient burst past 300 req/min self-heals instead of dropping a
+  // whole league for the cycle.
+  if (res.status === 429 && attempt < MAX_429_RETRIES) {
+    await new Promise((r) => setTimeout(r, 2_000 * (attempt + 1)));
+    return fetchPage(params, attempt + 1);
+  }
   if (!res.ok) {
     const body = await res.text().catch(() => "");
     throw new SportsGameOddsError(
@@ -306,31 +318,29 @@ export interface LeagueFetchError {
 }
 
 /**
- * Free plan = 10 req/min. Each league call can paginate, so firing 4 leagues in
- * parallel easily bursts past the cap. Fetch sequentially with a short delay
- * between leagues to stay comfortably under the limit.
+ * Pro plan = 300 req/min, so fetching all leagues concurrently is well within
+ * the limit (5 leagues × a few paginated requests each). fetchPage retries on
+ * 429, so a transient burst over the cap self-heals rather than dropping a
+ * league. Per-league failures stay isolated via allSettled.
  */
-const PER_LEAGUE_DELAY_MS = 7_000;
-
 export async function fetchAllGames(
   leagues: League[],
   errorsOut?: LeagueFetchError[],
   opts: { hoursBack?: number; hoursForward?: number } = {},
 ): Promise<Game[]> {
   const out: Game[] = [];
-  for (let i = 0; i < leagues.length; i++) {
+  const results = await Promise.allSettled(
+    leagues.map((l) => fetchLeagueGames(l, opts)),
+  );
+  results.forEach((r, i) => {
     const l = leagues[i];
-    try {
-      const games = await fetchLeagueGames(l, opts);
-      out.push(...games);
-    } catch (e) {
-      const msg = (e as Error).message;
+    if (r.status === "fulfilled") {
+      out.push(...r.value);
+    } else {
+      const msg = (r.reason as Error).message;
       console.warn(`[sportsgameodds] ${l} failed:`, msg);
       errorsOut?.push({ league: l, message: msg });
     }
-    if (i < leagues.length - 1) {
-      await new Promise((r) => setTimeout(r, PER_LEAGUE_DELAY_MS));
-    }
-  }
+  });
   return out;
 }
