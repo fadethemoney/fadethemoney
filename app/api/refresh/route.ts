@@ -88,25 +88,13 @@ async function runRefresh(opts: { hoursBack?: number; hoursForward?: number } = 
   // Use the locked, post-finalResult-attach data from `todays` (store-backed)
   // — never the live `all` array, whose verdicts may be stale.
   const perLeague: Partial<Record<League, LeagueStreaks>> = { ...(store.streaks ?? {}) };
-  // One-time migration of legacy public/vegas total winners → over/under.
-  // The schema flipped back to over/under on 2026-05-17 (commit 3abb4f7).
-  // Any persisted history with winner === "public" or "vegas" predates that
-  // flip; wipe it once so totals rebuild cleanly from corrected finalResults.
-  for (const league of LEAGUES) {
-    const ls = perLeague[league];
-    if (!ls) continue;
-    const hasLegacy = ls.total.history.some(
-      (h) => (h.winner as string) === "public" || (h.winner as string) === "vegas",
-    );
-    const legacyCurrent = (ls.total.current as string | null) === "public"
-      || (ls.total.current as string | null) === "vegas";
-    if (hasLegacy || legacyCurrent) {
-      perLeague[league] = {
-        ...ls,
-        total: { current: null, count: 0, lastNotifiedCount: 0, history: [] },
-      };
-    }
-  }
+  // NOTE: A legacy public/vegas→over/under total-streak migration used to live
+  // here. It was removed 2026-06-13: the totals schema flipped *back* to
+  // public/vegas (favorite-of-total semantics), so the migration matched every
+  // current total streak and wiped it on every refresh — resetting
+  // lastNotifiedCount to 0 and re-sending the same milestone total emails every
+  // cron tick. Removing it lets lastNotifiedCount persist so each milestone
+  // emails exactly once.
   for (const g of todays.filter((g) => g.status === "final" && g.finalResult)) {
     const prev = getLeagueStreaks(perLeague, g.league);
     perLeague[g.league] = applyGameToLeagueStreaks(prev, g, today);
