@@ -5,6 +5,7 @@ import type {
   Game,
   League,
   LeagueStreaks,
+  MoneylineWinner,
   TotalWinner,
 } from "./types";
 import { totalFavoriteSide } from "./calc";
@@ -24,14 +25,27 @@ function emptyCategory<W extends string>(): CategoryStreak<W> {
 }
 
 export function emptyLeagueStreaks(): LeagueStreaks {
-  return { ats: emptyCategory<AtsWinner>(), total: emptyCategory<TotalWinner>() };
+  return {
+    ats: emptyCategory<AtsWinner>(),
+    total: emptyCategory<TotalWinner>(),
+    moneyline: emptyCategory<MoneylineWinner>(),
+  };
 }
 
 export function getLeagueStreaks(
   streaks: Partial<Record<League, LeagueStreaks>> | undefined,
   league: League,
 ): LeagueStreaks {
-  return streaks?.[league] ?? emptyLeagueStreaks();
+  const existing = streaks?.[league];
+  if (!existing) return emptyLeagueStreaks();
+  // Backfill any category missing from older stored data (e.g. streaks written
+  // before the moneyline category existed) so the rest of the pipeline can
+  // assume all three categories are present.
+  return {
+    ats: existing.ats ?? emptyCategory<AtsWinner>(),
+    total: existing.total ?? emptyCategory<TotalWinner>(),
+    moneyline: existing.moneyline ?? emptyCategory<MoneylineWinner>(),
+  };
 }
 
 function applyWinner<W extends string>(
@@ -85,6 +99,18 @@ export function applyGameToLeagueStreaks(
     const updated = applyWinner(next.total, game, w, today);
     if (updated) next = { ...next, total: updated };
   }
+
+  // Moneyline streak: did the betting favorite (pickedSide) win the game
+  // outright ("public") or did the underdog win outright ("vegas")? No push —
+  // every final has a straight-up winner. Requires a locked trend so we know
+  // which side was favored pregame.
+  const favSide = game.trend?.pickedSide;
+  if (favSide) {
+    const favWon = game.finalResult.winnerSide === favSide;
+    const w: MoneylineWinner = favWon ? "public" : "vegas";
+    const updated = applyWinner(next.moneyline, game, w, today);
+    if (updated) next = { ...next, moneyline: updated };
+  }
   return next;
 }
 
@@ -120,6 +146,23 @@ function buildLines<W extends string>(
           : null;
       const publicLabel = fav
         ? `Public: ${fav.abbr}${favSpread !== null ? ` ${favSpread > 0 ? "+" : ""}${favSpread}` : ""}`
+        : "Public: —";
+      const score =
+        typeof g.home.score === "number" && typeof g.away.score === "number"
+          ? ` ${g.away.score}-${g.home.score}`
+          : "";
+      const outcome = h.winner === "public" ? "PUBLIC WIN ✓" : "VEGAS WIN ✗";
+      return `• ${g.league.toUpperCase()} — ${matchup}${score} — ${publicLabel} → ${outcome}`;
+    }
+    if (category === "moneyline") {
+      // Moneyline: the betting favorite is "public". Show the favored team, its
+      // ML price, the final score, and the straight-up outcome.
+      const favSide = g.trend?.pickedSide;
+      const fav = favSide === "home" ? g.home : favSide === "away" ? g.away : null;
+      const favOdds =
+        favSide === "home" ? g.trend?.mlOddsHome : favSide === "away" ? g.trend?.mlOddsAway : null;
+      const publicLabel = fav
+        ? `Public: ${fav.abbr} ML${favOdds ? ` (${favOdds})` : ""}`
         : "Public: —";
       const score =
         typeof g.home.score === "number" && typeof g.away.score === "number"
@@ -165,6 +208,16 @@ function nextGameLine(category: BetCategory, g: Game | null | undefined): string
         : null;
     const publicLabel = fav
       ? `Public: ${fav.abbr}${favSpread !== null ? ` ${favSpread > 0 ? "+" : ""}${favSpread}` : ""}`
+      : "Public: —";
+    return `Next up: ${g.league.toUpperCase()} — ${matchup}${when} — ${publicLabel}`;
+  }
+  if (category === "moneyline") {
+    const favSide = g.trend?.pickedSide;
+    const fav = favSide === "home" ? g.home : favSide === "away" ? g.away : null;
+    const favOdds =
+      favSide === "home" ? g.trend?.mlOddsHome : favSide === "away" ? g.trend?.mlOddsAway : null;
+    const publicLabel = fav
+      ? `Public: ${fav.abbr} ML${favOdds ? ` (${favOdds})` : ""}`
       : "Public: —";
     return `Next up: ${g.league.toUpperCase()} — ${matchup}${when} — ${publicLabel}`;
   }
@@ -224,6 +277,28 @@ export function buildTotalEmails(
       category: "total",
       subject: `Fade The Money — ${league.toUpperCase()} ${side} on a ${n}-total streak (totals)`,
       text: withNextGame([header, "", ...buildLines("total", streak, gamesById, n)], "total", nextGame),
+      newLastNotifiedCount: n,
+    });
+  }
+  return out;
+}
+
+export function buildMoneylineEmails(
+  league: League,
+  streak: CategoryStreak<MoneylineWinner>,
+  gamesById: Map<string, Game>,
+  nextGame?: Game | null,
+): StreakEmail[] {
+  const out: StreakEmail[] = [];
+  const start = Math.max(MIN_NOTIFY_COUNT, streak.lastNotifiedCount + 1);
+  for (let n = start; n <= streak.count; n++) {
+    const side = streak.current?.toUpperCase();
+    const header = `${league.toUpperCase()} MONEYLINE — ${side} has won ${n} bets in a row (straight up).`;
+    out.push({
+      league,
+      category: "moneyline",
+      subject: `Fade The Money — ${league.toUpperCase()} ${streak.current} on a ${n}-game moneyline streak`,
+      text: withNextGame([header, "", ...buildLines("moneyline", streak, gamesById, n)], "moneyline", nextGame),
       newLastNotifiedCount: n,
     });
   }

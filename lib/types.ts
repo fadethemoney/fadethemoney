@@ -66,9 +66,16 @@ export interface StreakState {
   history: { date: string; winner: "public" | "vegas" }[];
 }
 
-export type BetCategory = "ats" | "total";
+export type BetCategory = "ats" | "total" | "moneyline";
 
 export type AtsWinner = "public" | "vegas";
+
+// Moneyline streak tracks favorite-vs-dog on the straight-up result. The client
+// confirmed "betting favorites is public": the favorite (pickedSide, derived
+// from the spread) winning the game outright is a "public" win; the underdog
+// winning outright is a "vegas" win. No push — every game has a straight-up
+// winner. Same shape as AtsWinner so all three categories read identically.
+export type MoneylineWinner = "public" | "vegas";
 // Totals streak tracks favorite-vs-dog on the total, NOT over-vs-under — the
 // client cares whether the juice-favorite side keeps winning, not whether the
 // game went Over five nights running. The favorite side of the total (over or
@@ -87,6 +94,7 @@ export interface CategoryStreak<W extends string> {
 export interface LeagueStreaks {
   ats: CategoryStreak<AtsWinner>;
   total: CategoryStreak<TotalWinner>;
+  moneyline: CategoryStreak<MoneylineWinner>;
 }
 
 export interface DailyRecord {

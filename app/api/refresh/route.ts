@@ -8,6 +8,7 @@ import { notifyAdmin } from "@/lib/mailer";
 import {
   applyGameToLeagueStreaks,
   buildAtsEmails,
+  buildMoneylineEmails,
   buildTotalEmails,
   findNextGame,
   getLeagueStreaks,
@@ -102,8 +103,10 @@ async function runRefresh(opts: { hoursBack?: number; hoursForward?: number } = 
   const afterPer = await readStore();
   const gameByIdPer = new Map(afterPer.games.map((g) => [g.id, g]));
   for (const league of LEAGUES) {
-    const ls = perLeague[league];
-    if (!ls) continue;
+    if (!perLeague[league]) continue;
+    // Normalize so older stored data missing the moneyline category is
+    // backfilled before we read/write it.
+    const ls = getLeagueStreaks(perLeague, league);
     const nextGame = findNextGame(afterPer.games, league);
     for (const email of buildAtsEmails(league, ls.ats, gameByIdPer, nextGame)) {
       try {
@@ -121,6 +124,15 @@ async function runRefresh(opts: { hoursBack?: number; hoursForward?: number } = 
       }
       ls.total = { ...ls.total, lastNotifiedCount: email.newLastNotifiedCount };
     }
+    for (const email of buildMoneylineEmails(league, ls.moneyline, gameByIdPer, nextGame)) {
+      try {
+        await notifyAdmin({ subject: email.subject, text: email.text });
+      } catch (e) {
+        console.warn("[refresh] notifyAdmin (moneyline) failed:", (e as Error).message);
+      }
+      ls.moneyline = { ...ls.moneyline, lastNotifiedCount: email.newLastNotifiedCount };
+    }
+    perLeague[league] = ls;
   }
   await setLeagueStreaks(perLeague);
 

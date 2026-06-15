@@ -20,6 +20,7 @@ import { notifyAdmin } from "../lib/mailer";
 import {
   applyGameToLeagueStreaks,
   buildAtsEmails,
+  buildMoneylineEmails,
   buildTotalEmails,
   getLeagueStreaks,
   MIN_NOTIFY_COUNT,
@@ -112,8 +113,8 @@ async function run() {
   const afterPer = await readStore();
   const gameByIdPer = new Map(afterPer.games.map((g) => [g.id, g]));
   for (const league of LEAGUES) {
-    const ls = perLeague[league];
-    if (!ls) continue;
+    if (!perLeague[league]) continue;
+    const ls = getLeagueStreaks(perLeague, league);
     for (const email of buildAtsEmails(league, ls.ats, gameByIdPer)) {
       await notifyAdmin({ subject: email.subject, text: email.text });
       ls.ats = { ...ls.ats, lastNotifiedCount: email.newLastNotifiedCount };
@@ -122,6 +123,11 @@ async function run() {
       await notifyAdmin({ subject: email.subject, text: email.text });
       ls.total = { ...ls.total, lastNotifiedCount: email.newLastNotifiedCount };
     }
+    for (const email of buildMoneylineEmails(league, ls.moneyline, gameByIdPer)) {
+      await notifyAdmin({ subject: email.subject, text: email.text });
+      ls.moneyline = { ...ls.moneyline, lastNotifiedCount: email.newLastNotifiedCount };
+    }
+    perLeague[league] = ls;
   }
   await setLeagueStreaks(perLeague);
 
@@ -134,7 +140,7 @@ async function run() {
         return [
           l,
           ls
-            ? `ats ${ls.ats.current ?? "—"} x${ls.ats.count} · tot ${ls.total.current ?? "—"} x${ls.total.count}`
+            ? `ats ${ls.ats.current ?? "—"} x${ls.ats.count} · tot ${ls.total.current ?? "—"} x${ls.total.count} · ml ${ls.moneyline?.current ?? "—"} x${ls.moneyline?.count ?? 0}`
             : "—",
         ];
       }),
