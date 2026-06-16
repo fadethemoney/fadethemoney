@@ -2,6 +2,12 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
+import { AnnouncementBar } from "@/components/AnnouncementBar";
+import { getActiveNotifications } from "@/lib/notifications";
+
+// Render per request so the announcement bar always reflects the latest active
+// tips (no stale build-time snapshot).
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Fade The Money — When the Public is Wrong, We Track It",
@@ -9,7 +15,9 @@ export const metadata: Metadata = {
     "Live sports betting dashboard tracking whether the public or Vegas is winning. Public streaks and live scores.",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const tips = await getActiveNotifications();
+
   return (
     <html lang="en">
       <head>
@@ -21,6 +29,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body>
+        <AnnouncementBar tips={tips} />
         <SiteHeader />
         {children}
         <SiteFooter />

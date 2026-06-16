@@ -1,45 +1,55 @@
 "use client";
 
-import { useState, type ChangeEvent, type FormEvent } from "react";
+import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
 import { Modal } from "@/components/admin/Modal";
 import { AuthButton } from "@/components/auth/AuthButton";
 import { Field } from "@/components/auth/Field";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 type Status = "draft" | "active";
-type Tip = { id: number; title: string; teamPick: string; message: string; status: Status };
-
-const INITIAL_TIPS: Tip[] = [
-  {
-    id: 3,
-    title: "Lakers ML vs Suns",
-    teamPick: "LAL moneyline",
-    message: "Public is heavy on Phoenix tonight — we're fading to the Lakers at home.",
-    status: "active",
-  },
-  {
-    id: 2,
-    title: "Over 47.5 — Chiefs / Bills",
-    teamPick: "OVER 47.5",
-    message: "Both offenses trending up; sharp money pushing the total over.",
-    status: "active",
-  },
-  {
-    id: 1,
-    title: "Celtics ML",
-    teamPick: "BOS moneyline",
-    message: "Draft — not sent yet.",
-    status: "draft",
-  },
-];
+type Tip = { id: string; title: string; teamPick: string; message: string; status: Status };
 
 const EMPTY_FORM = { title: "", teamPick: "", message: "", status: "draft" as Status };
 
+// Map a notifications DB row to the UI shape.
+function fromRow(r: {
+  id: string;
+  title: string;
+  team_pick: string;
+  message: string | null;
+  status: Status;
+}): Tip {
+  return { id: r.id, title: r.title, teamPick: r.team_pick, message: r.message ?? "", status: r.status };
+}
+
+const SELECT = "id, title, team_pick, message, status";
+
 export default function NotificationsPage() {
-  const [tips, setTips] = useState<Tip[]>(INITIAL_TIPS);
+  const [supabase] = useState(() => createSupabaseBrowserClient());
+  const [tips, setTips] = useState<Tip[]>([]);
+  const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
-  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [error, setError] = useState<string>();
+  const [busy, setBusy] = useState(false);
+
+  // Load existing tips (admins read all via RLS; ordered newest first).
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const { data, error } = await supabase
+        .from("notifications")
+        .select(SELECT)
+        .order("created_at", { ascending: false });
+      if (!active) return;
+      if (!error && data) setTips(data.map(fromRow));
+      setLoading(false);
+    })();
+    return () => {
+      active = false;
+    };
+  }, [supabase]);
 
   const setField =
     (k: keyof typeof form) => (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
@@ -59,29 +69,70 @@ export default function NotificationsPage() {
     setOpen(true);
   }
 
-  function save(e: FormEvent) {
+  async function save(e: FormEvent) {
     e.preventDefault();
     if (!form.title.trim() || !form.teamPick.trim()) {
       setError("Title and team pick are required.");
       return;
     }
+    setBusy(true);
+    setError(undefined);
+    const payload = {
+      title: form.title.trim(),
+      team_pick: form.teamPick.trim(),
+      message: form.message.trim(),
+      status: form.status,
+    };
+
     if (editingId !== null) {
-      setTips((list) => list.map((t) => (t.id === editingId ? { ...t, ...form } : t)));
+      const { data, error } = await supabase
+        .from("notifications")
+        .update(payload)
+        .eq("id", editingId)
+        .select(SELECT)
+        .single();
+      if (error || !data) {
+        setError(error?.message ?? "Could not save.");
+        setBusy(false);
+        return;
+      }
+      setTips((list) => list.map((t) => (t.id === editingId ? fromRow(data) : t)));
     } else {
-      const nextId = tips.reduce((m, t) => Math.max(m, t.id), 0) + 1;
-      setTips((list) => [{ id: nextId, ...form }, ...list]);
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      const { data, error } = await supabase
+        .from("notifications")
+        .insert({ ...payload, created_by: user?.id ?? null })
+        .select(SELECT)
+        .single();
+      if (error || !data) {
+        setError(error?.message ?? "Could not create.");
+        setBusy(false);
+        return;
+      }
+      setTips((list) => [fromRow(data), ...list]);
     }
+    setBusy(false);
     setOpen(false);
   }
 
-  function toggleStatus(id: number) {
-    setTips((list) =>
-      list.map((t) => (t.id === id ? { ...t, status: t.status === "active" ? "draft" : "active" } : t)),
-    );
+  async function toggleStatus(id: string) {
+    const tip = tips.find((t) => t.id === id);
+    if (!tip) return;
+    const next: Status = tip.status === "active" ? "draft" : "active";
+    setTips((list) => list.map((t) => (t.id === id ? { ...t, status: next } : t))); // optimistic
+    const { error } = await supabase.from("notifications").update({ status: next }).eq("id", id);
+    if (error) {
+      setTips((list) => list.map((t) => (t.id === id ? { ...t, status: tip.status } : t))); // revert
+    }
   }
 
-  function remove(id: number) {
-    setTips((list) => list.filter((t) => t.id !== id));
+  async function remove(id: string) {
+    const prev = tips;
+    setTips((list) => list.filter((t) => t.id !== id)); // optimistic
+    const { error } = await supabase.from("notifications").delete().eq("id", id);
+    if (error) setTips(prev); // revert
   }
 
   return (
@@ -90,7 +141,7 @@ export default function NotificationsPage() {
         <div>
           <h1 className="admin-h1">Notifications</h1>
           <p className="admin-sub" style={{ marginBottom: 0 }}>
-            Post a tip and email it to your users.
+            Post a tip. Active tips appear in the announcement bar at the top of the site.
           </p>
         </div>
         <button className="account-btn" onClick={openNew}>
@@ -98,7 +149,9 @@ export default function NotificationsPage() {
         </button>
       </div>
 
-      {tips.length === 0 ? (
+      {loading ? (
+        <div className="nm-empty">Loading…</div>
+      ) : tips.length === 0 ? (
         <div className="nm-empty">No tips yet. Hit “New tip” to post your first one.</div>
       ) : (
         <div className="nm-list">
@@ -117,7 +170,7 @@ export default function NotificationsPage() {
                   Edit
                 </button>
                 <button className="nm-btn" onClick={() => toggleStatus(t.id)}>
-                  {t.status === "active" ? "Move to draft" : "Activate & send"}
+                  {t.status === "active" ? "Move to draft" : "Activate"}
                 </button>
                 <button className="nm-btn danger" onClick={() => remove(t.id)}>
                   Delete
@@ -178,7 +231,9 @@ export default function NotificationsPage() {
             </div>
           </div>
           {error ? <div className="auth-banner error">{error}</div> : null}
-          <AuthButton type="submit">{editingId !== null ? "Save changes" : "Create tip"}</AuthButton>
+          <AuthButton type="submit">
+            {busy ? "Saving…" : editingId !== null ? "Save changes" : "Create tip"}
+          </AuthButton>
         </form>
       </Modal>
     </>

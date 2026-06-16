@@ -47,6 +47,62 @@ a { color: inherit; }
 .accent { color: var(--accent); }
 em { font-style: italic; color: var(--accent); font-weight: 400; }
 
+/* Announcement bar (active tips, above the header) */
+.announce {
+  background: var(--accent);
+  color: #FFFFFF;
+}
+.announce-inner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 0;
+}
+.announce-tag {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  background: rgba(255, 255, 255, 0.18);
+  color: #FFFFFF;
+  padding: 3px 8px;
+  border-radius: 4px;
+}
+.announce-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: rgba(255, 255, 255, 0.95);
+}
+.announce-pick { font-family: var(--font-mono); font-weight: 500; color: #FFFFFF; }
+.announce-sep { margin: 0 8px; opacity: 0.5; }
+.announce-dots { display: flex; gap: 5px; flex-shrink: 0; }
+.announce-dots span {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: rgba(255, 255, 255, 0.35);
+  transition: background 0.2s ease;
+}
+.announce-dots span.on { background: #FFFFFF; }
+.announce-dismiss {
+  flex-shrink: 0;
+  background: none;
+  border: 0;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+}
+.announce-dismiss:hover { color: #FFFFFF; }
+@media (max-width: 640px) {
+  .announce-sep, .announce-dots { display: none; }
+  .announce-text { font-size: 12px; }
+}
+
 /* Header */
 header.site {
   border-bottom: 1px solid var(--border);
