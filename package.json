@@ -11,12 +11,15 @@
     "test-alert": "tsx scripts/test-alert.ts"
   },
   "dependencies": {
+    "@supabase/ssr": "^0.12.0",
+    "@supabase/supabase-js": "^2.108.1",
     "@vercel/blob": "^2.3.3",
     "next": "15.5.9",
     "nodemailer": "^6.9.16",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "resend": "^6.12.2"
+    "resend": "^6.12.2",
+    "server-only": "^0.0.1"
   },
   "devDependencies": {
     "@types/node": "^22.9.0",
