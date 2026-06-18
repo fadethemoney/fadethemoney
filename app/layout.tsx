@@ -4,6 +4,7 @@ import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { AnnouncementBar } from "@/components/AnnouncementBar";
 import { getActiveNotifications } from "@/lib/notifications";
+import { getSessionUser } from "@/lib/auth";
 
 // Render per request so the announcement bar always reflects the latest active
 // tips (no stale build-time snapshot).
@@ -16,7 +17,10 @@ export const metadata: Metadata = {
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const tips = await getActiveNotifications();
+  // The announcement bar (active tips) is only shown to signed-in users —
+  // anonymous visitors don't see it. Phase 3 will narrow this to paid subscribers.
+  const user = await getSessionUser();
+  const tips = user ? await getActiveNotifications() : [];
 
   return (
     <html lang="en">
