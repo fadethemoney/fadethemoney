@@ -10,9 +10,10 @@ type Dashboard = {
   totalTips: number;
   activeTips: number;
   recent: RecentTip[];
+  error: boolean;
 };
 
-const EMPTY: Dashboard = { totalUsers: 0, subscribed: 0, totalTips: 0, activeTips: 0, recent: [] };
+const EMPTY: Dashboard = { totalUsers: 0, subscribed: 0, totalTips: 0, activeTips: 0, recent: [], error: false };
 
 /** Real counts + recent tips. Runs as the logged-in admin, so RLS lets it read
  *  every profile and notification. Falls back to zeros in mock mode (no env). */
@@ -30,12 +31,15 @@ async function loadDashboard(): Promise<Dashboard> {
       .order("created_at", { ascending: false })
       .limit(5),
   ]);
+  const firstError = users.error || subs.error || tips.error || active.error || recent.error;
+  if (firstError) console.error("[admin/dashboard] load error:", firstError);
   return {
     totalUsers: users.count ?? 0,
     subscribed: subs.count ?? 0,
     totalTips: tips.count ?? 0,
     activeTips: active.count ?? 0,
     recent: (recent.data as RecentTip[] | null) ?? [],
+    error: !!firstError,
   };
 }
 
@@ -55,7 +59,7 @@ export default async function AdminDashboardPage() {
   const d = await loadDashboard();
   const stats = [
     { label: "Total users", value: String(d.totalUsers), trend: "registered" },
-    { label: "Subscribed", value: String(d.subscribed), trend: "email opt-in" },
+    { label: "Email opt-in", value: String(d.subscribed), trend: "subscribed to email" },
     { label: "Tips posted", value: String(d.totalTips), trend: "all time" },
     { label: "Active tips", value: String(d.activeTips), trend: "live now" },
   ];
@@ -64,6 +68,12 @@ export default async function AdminDashboardPage() {
     <>
       <h1 className="admin-h1">Dashboard</h1>
       <p className="admin-sub">Overview of accounts and the tips you&apos;ve posted.</p>
+
+      {d.error ? (
+        <div className="auth-banner error" style={{ marginBottom: 16 }} role="status">
+          Couldn&apos;t load some dashboard data — figures may be incomplete.
+        </div>
+      ) : null}
 
       <div className="stat-grid">
         {stats.map((s) => (

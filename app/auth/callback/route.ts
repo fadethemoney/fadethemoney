@@ -2,15 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { syncSuperAdmin } from "@/lib/auth";
 import { welcomeNewUser } from "@/app/auth/actions";
-
-/** Only allow internal, single-slash paths — blocks open-redirect via `next`. */
-function safeNext(raw: string | null): string {
-  const next = raw ?? "/account";
-  if (!next.startsWith("/") || next.startsWith("//") || next.startsWith("/\\")) {
-    return "/account";
-  }
-  return next;
-}
+import { safeInternalPath } from "@/lib/landing";
 
 /**
  * Landing endpoint for email links (verification + password reset). Supabase
@@ -20,7 +12,7 @@ function safeNext(raw: string | null): string {
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
-  const next = safeNext(searchParams.get("next"));
+  const next = safeInternalPath(searchParams.get("next")) ?? "/account";
 
   if (code) {
     const supabase = await createSupabaseServerClient();

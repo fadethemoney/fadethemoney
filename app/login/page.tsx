@@ -9,7 +9,7 @@ import { AuthBanner } from "@/components/auth/AuthBanner";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { bootstrapSuperAdmin } from "@/app/auth/actions";
 import { isValidEmail } from "@/lib/validation";
-import { landingPathForRole } from "@/lib/landing";
+import { landingPathForRole, safeInternalPath } from "@/lib/landing";
 
 type Form = { email: string; password: string };
 
@@ -71,7 +71,7 @@ export default function LoginPage() {
     }
     const home = landingPathForRole(role);
     const rawNext = new URLSearchParams(window.location.search).get("next");
-    const safeNext = rawNext && rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : null;
+    const safeNext = safeInternalPath(rawNext);
     const dest = safeNext && !(safeNext.startsWith("/admin") && home !== "/admin") ? safeNext : home;
     window.location.assign(dest);
   }

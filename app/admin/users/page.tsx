@@ -63,6 +63,7 @@ export default function UsersPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [myRole, setMyRole] = useState<Role>("admin");
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [notice, setNotice] = useState<{ kind: "info" | "error"; text: string }>();
   const [pending, startTransition] = useTransition();
 
@@ -74,8 +75,16 @@ export default function UsersPage() {
       const {
         data: { user },
       } = await supabase.auth.getUser();
-      const { data } = await supabase.from("profiles").select(SELECT).order("created_at", { ascending: true });
+      const { data, error } = await supabase
+        .from("profiles")
+        .select(SELECT)
+        .order("created_at", { ascending: true });
       if (!active) return;
+      if (error) {
+        setLoadError(true);
+        setLoading(false);
+        return;
+      }
       const list = (data ?? []).map(fromRow);
       setUsers(list);
       const me = list.find((u) => u.id === user?.id);
@@ -146,6 +155,8 @@ export default function UsersPage() {
 
       {loading ? (
         <div className="nm-empty">Loading…</div>
+      ) : loadError ? (
+        <div className="nm-empty">Couldn&apos;t load users. Refresh to try again.</div>
       ) : users.length === 0 ? (
         <div className="nm-empty">No registered users yet.</div>
       ) : (

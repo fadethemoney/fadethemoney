@@ -64,6 +64,13 @@ export async function setOptIn(userId: string, optIn: boolean): Promise<Result> 
     return { ok: false, error: "Not authorized." };
   }
   const admin = createSupabaseAdminClient();
+  // A regular admin must not change a super admin's opt-in (mirrors the
+  // super_admin guards on setUserRole/deleteUser).
+  const { data: target } = await admin.from("profiles").select("role").eq("id", userId).single();
+  if (!target) return { ok: false, error: "User not found." };
+  if (target.role === "super_admin" && me.role !== "super_admin") {
+    return { ok: false, error: "Not authorized." };
+  }
   const { error } = await admin.from("profiles").update({ email_opt_in: optIn }).eq("id", userId);
   if (error) return { ok: false, error: error.message };
   return { ok: true };
