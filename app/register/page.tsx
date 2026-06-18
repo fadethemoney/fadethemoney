@@ -7,7 +7,7 @@ import { Field } from "@/components/auth/Field";
 import { AuthButton } from "@/components/auth/AuthButton";
 import { AuthBanner } from "@/components/auth/AuthBanner";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
-import { bootstrapSuperAdmin } from "@/app/auth/actions";
+import { bootstrapSuperAdmin, welcomeNewUser } from "@/app/auth/actions";
 import { isValidEmail, passwordIssue } from "@/lib/validation";
 import { landingPathForRole } from "@/lib/landing";
 
@@ -58,6 +58,7 @@ export default function RegisterPage() {
     // Email confirmation OFF → Supabase returns a session, so we're signed in.
     if (data.session) {
       await bootstrapSuperAdmin();
+      await welcomeNewUser();
       const {
         data: { user },
       } = await supabase.auth.getUser();

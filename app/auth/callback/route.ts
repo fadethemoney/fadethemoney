@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { syncSuperAdmin } from "@/lib/auth";
+import { welcomeNewUser } from "@/app/auth/actions";
 
 /** Only allow internal, single-slash paths — blocks open-redirect via `next`. */
 function safeNext(raw: string | null): string {
@@ -36,6 +37,9 @@ export async function GET(request: NextRequest) {
         } catch {
           /* ignore — bootstrap is best-effort */
         }
+        // Welcome email for the email-confirmation path. Idempotent via the
+        // welcomed_at claim, so it won't duplicate the auto-confirm send.
+        await welcomeNewUser();
       }
       return NextResponse.redirect(`${origin}${next}`);
     }
