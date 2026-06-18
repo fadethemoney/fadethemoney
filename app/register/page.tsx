@@ -9,6 +9,7 @@ import { AuthBanner } from "@/components/auth/AuthBanner";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { bootstrapSuperAdmin } from "@/app/auth/actions";
 import { isValidEmail, passwordIssue } from "@/lib/validation";
+import { landingPathForRole } from "@/lib/landing";
 
 type Form = { name: string; email: string; password: string; confirm: string };
 
@@ -57,7 +58,15 @@ export default function RegisterPage() {
     // Email confirmation OFF → Supabase returns a session, so we're signed in.
     if (data.session) {
       await bootstrapSuperAdmin();
-      window.location.assign("/account");
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      let role: string | undefined;
+      if (user) {
+        const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
+        role = profile?.role ?? undefined;
+      }
+      window.location.assign(landingPathForRole(role));
       return;
     }
     // Confirmation ON → verification email sent.

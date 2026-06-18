@@ -9,13 +9,9 @@ import { AuthBanner } from "@/components/auth/AuthBanner";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { bootstrapSuperAdmin } from "@/app/auth/actions";
 import { isValidEmail } from "@/lib/validation";
+import { landingPathForRole } from "@/lib/landing";
 
 type Form = { email: string; password: string };
-
-function safeNext(raw: string | null): string {
-  if (!raw || !raw.startsWith("/") || raw.startsWith("//")) return "/account";
-  return raw;
-}
 
 export default function LoginPage() {
   const [form, setForm] = useState<Form>({ email: "", password: "" });
@@ -61,8 +57,23 @@ export default function LoginPage() {
     // Promote env-allowlisted emails to super_admin, then hard-navigate so the
     // server picks up the fresh session.
     await bootstrapSuperAdmin();
-    const next = safeNext(new URLSearchParams(window.location.search).get("next"));
-    window.location.assign(next);
+
+    // Land by role: admins → /admin, everyone else → /account. An explicit
+    // ?next= is honored, except we never send a non-admin into /admin (the
+    // middleware would just bounce them back to "/").
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    let role: string | undefined;
+    if (user) {
+      const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
+      role = profile?.role ?? undefined;
+    }
+    const home = landingPathForRole(role);
+    const rawNext = new URLSearchParams(window.location.search).get("next");
+    const safeNext = rawNext && rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : null;
+    const dest = safeNext && !(safeNext.startsWith("/admin") && home !== "/admin") ? safeNext : home;
+    window.location.assign(dest);
   }
 
   return (

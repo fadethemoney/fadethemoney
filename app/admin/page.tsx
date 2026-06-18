@@ -1,28 +1,72 @@
 import Link from "next/link";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { isSupabaseConfigured } from "@/lib/supabase/client";
 
-// MOCK data — replaced by real Supabase queries once the DB is wired.
-const STATS = [
-  { label: "Total users", value: "248", trend: "+12 this week" },
-  { label: "Active tips", value: "3", trend: "live now" },
-  { label: "Tips sent (30d)", value: "41", trend: "via email" },
-  { label: "Streak alerts (30d)", value: "12", trend: "auto-sent" },
-];
+type RecentTip = { id: string; title: string; team_pick: string; status: "draft" | "active"; created_at: string };
 
-const RECENT_TIPS = [
-  { title: "Lakers ML vs Suns", meta: "NBA · 2h ago", status: "active" as const },
-  { title: "Over 47.5 — Chiefs / Bills", meta: "NFL · Yesterday", status: "active" as const },
-  { title: "Yankees -1.5 vs Red Sox", meta: "MLB · 2 days ago", status: "active" as const },
-  { title: "Celtics ML (draft)", meta: "NBA · not sent", status: "draft" as const },
-];
+type Dashboard = {
+  totalUsers: number;
+  subscribed: number;
+  totalTips: number;
+  activeTips: number;
+  recent: RecentTip[];
+};
 
-export default function AdminDashboardPage() {
+const EMPTY: Dashboard = { totalUsers: 0, subscribed: 0, totalTips: 0, activeTips: 0, recent: [] };
+
+/** Real counts + recent tips. Runs as the logged-in admin, so RLS lets it read
+ *  every profile and notification. Falls back to zeros in mock mode (no env). */
+async function loadDashboard(): Promise<Dashboard> {
+  if (!isSupabaseConfigured) return EMPTY;
+  const supabase = await createSupabaseServerClient();
+  const [users, subs, tips, active, recent] = await Promise.all([
+    supabase.from("profiles").select("id", { count: "exact", head: true }),
+    supabase.from("profiles").select("id", { count: "exact", head: true }).eq("email_opt_in", true),
+    supabase.from("notifications").select("id", { count: "exact", head: true }),
+    supabase.from("notifications").select("id", { count: "exact", head: true }).eq("status", "active"),
+    supabase
+      .from("notifications")
+      .select("id, title, team_pick, status, created_at")
+      .order("created_at", { ascending: false })
+      .limit(5),
+  ]);
+  return {
+    totalUsers: users.count ?? 0,
+    subscribed: subs.count ?? 0,
+    totalTips: tips.count ?? 0,
+    activeTips: active.count ?? 0,
+    recent: (recent.data as RecentTip[] | null) ?? [],
+  };
+}
+
+function ago(iso: string): string {
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return "";
+  const mins = Math.max(0, Math.round((Date.now() - then) / 60000));
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.round(hrs / 24);
+  return `${days}d ago`;
+}
+
+export default async function AdminDashboardPage() {
+  const d = await loadDashboard();
+  const stats = [
+    { label: "Total users", value: String(d.totalUsers), trend: "registered" },
+    { label: "Subscribed", value: String(d.subscribed), trend: "email opt-in" },
+    { label: "Tips posted", value: String(d.totalTips), trend: "all time" },
+    { label: "Active tips", value: String(d.activeTips), trend: "live now" },
+  ];
+
   return (
     <>
       <h1 className="admin-h1">Dashboard</h1>
-      <p className="admin-sub">Overview of accounts and the tips you&apos;ve sent.</p>
+      <p className="admin-sub">Overview of accounts and the tips you&apos;ve posted.</p>
 
       <div className="stat-grid">
-        {STATS.map((s) => (
+        {stats.map((s) => (
           <div className="stat-card" key={s.label}>
             <div className="stat-label">{s.label}</div>
             <div className="stat-value">{s.value}</div>
@@ -34,15 +78,21 @@ export default function AdminDashboardPage() {
       <div className="admin-grid-2">
         <div className="admin-panel">
           <div className="admin-panel-title">Recent tips</div>
-          {RECENT_TIPS.map((t) => (
-            <div className="tip-row" key={t.title}>
-              <div className="tip-main">
-                <div className="tip-title">{t.title}</div>
-                <div className="tip-meta">{t.meta}</div>
+          {d.recent.length === 0 ? (
+            <div className="nm-empty">No tips yet.</div>
+          ) : (
+            d.recent.map((t) => (
+              <div className="tip-row" key={t.id}>
+                <div className="tip-main">
+                  <div className="tip-title">{t.title}</div>
+                  <div className="tip-meta">
+                    {t.team_pick} · {ago(t.created_at)}
+                  </div>
+                </div>
+                <span className={`tip-status ${t.status}`}>{t.status}</span>
               </div>
-              <span className={`tip-status ${t.status}`}>{t.status}</span>
-            </div>
-          ))}
+            ))
+          )}
         </div>
 
         <div className="admin-panel">

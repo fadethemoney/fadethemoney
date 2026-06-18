@@ -1,25 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState, useTransition } from "react";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { deleteUser, setOptIn, setUserRole } from "./actions";
 
 type Role = "customer" | "admin" | "super_admin";
 type User = {
-  id: number;
+  id: string;
   name: string;
   email: string;
   role: Role;
-  optIn: boolean;
-  joined: string;
+  email_opt_in: boolean;
+  created_at: string;
 };
-
-const INITIAL_USERS: User[] = [
-  { id: 1, name: "Robert (owner)", email: "robert@doctorautoglass.com", role: "super_admin", optIn: true, joined: "Jan 2026" },
-  { id: 2, name: "Sam Bryann", email: "sbryann18@gmail.com", role: "admin", optIn: true, joined: "Feb 2026" },
-  { id: 3, name: "Jordan Banks", email: "jordan@example.com", role: "customer", optIn: true, joined: "Mar 2026" },
-  { id: 4, name: "Alex Rivera", email: "alex.rivera@example.com", role: "customer", optIn: false, joined: "Apr 2026" },
-  { id: 5, name: "Casey Lin", email: "casey.lin@example.com", role: "customer", optIn: true, joined: "May 2026" },
-  { id: 6, name: "Morgan Diaz", email: "morgan.diaz@example.com", role: "admin", optIn: true, joined: "May 2026" },
-];
 
 const ROLE_LABEL: Record<Role, string> = {
   customer: "User",
@@ -27,26 +20,106 @@ const ROLE_LABEL: Record<Role, string> = {
   super_admin: "Super admin",
 };
 
+const SELECT = "id, name, email, role, email_opt_in, created_at";
+
+function fromRow(r: {
+  id: string;
+  name: string | null;
+  email: string;
+  role: Role;
+  email_opt_in: boolean;
+  created_at: string;
+}): User {
+  return { ...r, name: r.name ?? "" };
+}
+
+function joined(iso: string): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime())
+    ? "—"
+    : d.toLocaleDateString(undefined, { month: "short", year: "numeric" });
+}
+
+function downloadCsv(users: User[]) {
+  const header = ["Name", "Email", "Role", "Email opt-in", "Joined"];
+  const esc = (v: string) => `"${v.replace(/"/g, '""')}"`;
+  const rows = users.map((u) =>
+    [u.name, u.email, ROLE_LABEL[u.role], u.email_opt_in ? "Subscribed" : "Unsubscribed", joined(u.created_at)]
+      .map((c) => esc(String(c)))
+      .join(","),
+  );
+  const csv = [header.map(esc).join(","), ...rows].join("\r\n");
+  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "fadethemoney-users.csv";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export default function UsersPage() {
-  const [users, setUsers] = useState<User[]>(INITIAL_USERS);
-  // Demo-only control: preview the page as a super_admin vs a regular admin.
-  const [viewAs, setViewAs] = useState<Role>("super_admin");
-  const [notice, setNotice] = useState<string>();
-  const isSuper = viewAs === "super_admin";
+  const [supabase] = useState(() => createSupabaseBrowserClient());
+  const [users, setUsers] = useState<User[]>([]);
+  const [myRole, setMyRole] = useState<Role>("admin");
+  const [loading, setLoading] = useState(true);
+  const [notice, setNotice] = useState<{ kind: "info" | "error"; text: string }>();
+  const [pending, startTransition] = useTransition();
 
-  const subscribed = users.filter((u) => u.optIn).length;
+  const isSuper = myRole === "super_admin";
 
-  function unsubscribe(id: number) {
-    setUsers((list) => list.map((u) => (u.id === id ? { ...u, optIn: false } : u)));
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      const { data } = await supabase.from("profiles").select(SELECT).order("created_at", { ascending: true });
+      if (!active) return;
+      const list = (data ?? []).map(fromRow);
+      setUsers(list);
+      const me = list.find((u) => u.id === user?.id);
+      if (me) setMyRole(me.role);
+      setLoading(false);
+    })();
+    return () => {
+      active = false;
+    };
+  }, [supabase]);
+
+  const subscribed = users.filter((u) => u.email_opt_in).length;
+
+  // Run a server action, then apply `onOk` to local state when it succeeds.
+  function run(action: () => Promise<{ ok: true } | { ok: false; error: string }>, onOk: () => void) {
+    setNotice(undefined);
+    startTransition(async () => {
+      const res = await action();
+      if (res.ok) onOk();
+      else setNotice({ kind: "error", text: res.error });
+    });
   }
-  function setRole(id: number, role: Role) {
-    setUsers((list) => list.map((u) => (u.id === id ? { ...u, role } : u)));
+
+  function unsubscribe(id: string) {
+    run(
+      () => setOptIn(id, false),
+      () => setUsers((list) => list.map((u) => (u.id === id ? { ...u, email_opt_in: false } : u))),
+    );
   }
-  function remove(id: number) {
-    setUsers((list) => list.filter((u) => u.id !== id));
+  function changeRole(id: string, role: Role) {
+    run(
+      () => setUserRole(id, role),
+      () => setUsers((list) => list.map((u) => (u.id === id ? { ...u, role } : u))),
+    );
+  }
+  function remove(id: string) {
+    run(
+      () => deleteUser(id),
+      () => setUsers((list) => list.filter((u) => u.id !== id)),
+    );
   }
   function exportCsv() {
-    setNotice(`Exported ${users.length} users to CSV. (Demo — no file generated yet.)`);
+    downloadCsv(users);
+    setNotice({ kind: "info", text: `Exported ${users.length} users to CSV.` });
   }
 
   return (
@@ -59,116 +132,94 @@ export default function UsersPage() {
           </p>
         </div>
         {isSuper ? (
-          <button className="account-btn" onClick={exportCsv}>
+          <button className="account-btn" onClick={exportCsv} disabled={loading || users.length === 0}>
             Export CSV
           </button>
         ) : null}
       </div>
 
-      {/* Demo control — not part of the real product; lets you preview both roles */}
-      <div className="ul-viewas">
-        <span className="ul-viewas-label">Preview as</span>
-        <div className="seg" role="group" aria-label="Preview role">
-          <button
-            type="button"
-            className={isSuper ? "active" : ""}
-            onClick={() => {
-              setViewAs("super_admin");
-              setNotice(undefined);
-            }}
-          >
-            Super admin
-          </button>
-          <button
-            type="button"
-            className={!isSuper ? "active" : ""}
-            onClick={() => {
-              setViewAs("admin");
-              setNotice(undefined);
-            }}
-          >
-            Admin
-          </button>
-        </div>
-      </div>
-
       {notice ? (
-        <div className="auth-banner info" style={{ marginBottom: 16 }} role="status">
-          {notice}
+        <div className={`auth-banner ${notice.kind}`} style={{ marginBottom: 16 }} role="status">
+          {notice.text}
         </div>
       ) : null}
 
-      <div className="ul-table">
-        <div className="ul-head">
-          <div>Name</div>
-          <div>Email</div>
-          <div>Role</div>
-          <div>Email</div>
-          <div>Actions</div>
+      {loading ? (
+        <div className="nm-empty">Loading…</div>
+      ) : users.length === 0 ? (
+        <div className="nm-empty">No registered users yet.</div>
+      ) : (
+        <div className="ul-table" aria-busy={pending}>
+          <div className="ul-head">
+            <div>Name</div>
+            <div>Email</div>
+            <div>Role</div>
+            <div>Email</div>
+            <div>Actions</div>
+          </div>
+
+          {users.map((u) => {
+            const manageable = isSuper && u.role !== "super_admin";
+            const actions: React.ReactNode[] = [];
+
+            if (u.email_opt_in) {
+              actions.push(
+                <button key="unsub" className="ul-sm-btn" disabled={pending} onClick={() => unsubscribe(u.id)}>
+                  Unsubscribe
+                </button>,
+              );
+            }
+            if (manageable && u.role === "customer") {
+              actions.push(
+                <button key="mk" className="ul-sm-btn" disabled={pending} onClick={() => changeRole(u.id, "admin")}>
+                  Make admin
+                </button>,
+              );
+            }
+            if (manageable && u.role === "admin") {
+              actions.push(
+                <button key="rm" className="ul-sm-btn" disabled={pending} onClick={() => changeRole(u.id, "customer")}>
+                  Remove admin
+                </button>,
+              );
+            }
+            if (manageable) {
+              actions.push(
+                <button key="del" className="ul-sm-btn danger" disabled={pending} onClick={() => remove(u.id)}>
+                  Delete
+                </button>,
+              );
+            }
+
+            return (
+              <div className="ul-row" key={u.id}>
+                <div className="ul-cell ul-name">
+                  <span className="ul-k">Name</span>
+                  {u.name || "—"}
+                </div>
+                <div className="ul-cell">
+                  <span className="ul-k">Email</span>
+                  <span className="ul-email">{u.email}</span>
+                </div>
+                <div className="ul-cell">
+                  <span className="ul-k">Role</span>
+                  <span className={`role-pill ${u.role}`}>{ROLE_LABEL[u.role]}</span>
+                </div>
+                <div className="ul-cell">
+                  <span className="ul-k">Email</span>
+                  <span className={`optin ${u.email_opt_in ? "yes" : "no"}`}>
+                    {u.email_opt_in ? "Subscribed" : "Unsubscribed"}
+                  </span>
+                </div>
+                <div className="ul-cell ul-actions">
+                  <span className="ul-k">Actions</span>
+                  {actions.length ? actions : <span className="muted">—</span>}
+                </div>
+              </div>
+            );
+          })}
         </div>
-
-        {users.map((u) => {
-          const canManageRole = isSuper && u.role !== "super_admin";
-          const canDelete = isSuper && u.role !== "super_admin";
-          const actions: React.ReactNode[] = [];
-
-          if (u.optIn) {
-            actions.push(
-              <button key="unsub" className="ul-sm-btn" onClick={() => unsubscribe(u.id)}>
-                Unsubscribe
-              </button>,
-            );
-          }
-          if (canManageRole && u.role === "customer") {
-            actions.push(
-              <button key="mk" className="ul-sm-btn" onClick={() => setRole(u.id, "admin")}>
-                Make admin
-              </button>,
-            );
-          }
-          if (canManageRole && u.role === "admin") {
-            actions.push(
-              <button key="rm" className="ul-sm-btn" onClick={() => setRole(u.id, "customer")}>
-                Remove admin
-              </button>,
-            );
-          }
-          if (canDelete) {
-            actions.push(
-              <button key="del" className="ul-sm-btn danger" onClick={() => remove(u.id)}>
-                Delete
-              </button>,
-            );
-          }
-
-          return (
-            <div className="ul-row" key={u.id}>
-              <div className="ul-cell ul-name">
-                <span className="ul-k">Name</span>
-                {u.name}
-              </div>
-              <div className="ul-cell">
-                <span className="ul-k">Email</span>
-                <span className="ul-email">{u.email}</span>
-              </div>
-              <div className="ul-cell">
-                <span className="ul-k">Role</span>
-                <span className={`role-pill ${u.role}`}>{ROLE_LABEL[u.role]}</span>
-              </div>
-              <div className="ul-cell">
-                <span className="ul-k">Email</span>
-                <span className={`optin ${u.optIn ? "yes" : "no"}`}>
-                  {u.optIn ? "Subscribed" : "Unsubscribed"}
-                </span>
-              </div>
-              <div className="ul-cell ul-actions">
-                <span className="ul-k">Actions</span>
-                {actions.length ? actions : <span className="muted">—</span>}
-              </div>
-            </div>
-          );
-        })}
-      </div>
+      )}
     </>
   );
 }
