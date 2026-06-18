@@ -19,9 +19,12 @@ export default function RegisterPage() {
   const [formError, setFormError] = useState<string>();
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
+  const [exists, setExists] = useState(false);
 
-  const update = (key: keyof Form) => (e: ChangeEvent<HTMLInputElement>) =>
+  const update = (key: keyof Form) => (e: ChangeEvent<HTMLInputElement>) => {
     setForm((f) => ({ ...f, [key]: e.target.value }));
+    if (exists) setExists(false);
+  };
 
   function validate() {
     const next: Partial<Record<keyof Form, string>> = {};
@@ -39,6 +42,7 @@ export default function RegisterPage() {
     if (!validate()) return;
     setLoading(true);
     setFormError(undefined);
+    setExists(false);
 
     const supabase = createSupabaseBrowserClient();
     const { data, error } = await supabase.auth.signUp({
@@ -52,7 +56,20 @@ export default function RegisterPage() {
 
     if (error) {
       setLoading(false);
-      setFormError(error.message);
+      // Some configs return an explicit error for an existing email.
+      if (/already (registered|exists)|user_already_exists/i.test(`${error.message} ${error.code ?? ""}`)) {
+        setExists(true);
+      } else {
+        setFormError(error.message);
+      }
+      return;
+    }
+    // Enumeration protection: signing up an already-registered email returns NO
+    // error and an obfuscated user with an empty identities array (and no
+    // session). Treat that as "already registered" rather than "check your email".
+    if (!data.session && Array.isArray(data.user?.identities) && data.user.identities.length === 0) {
+      setLoading(false);
+      setExists(true);
       return;
     }
     // Email confirmation OFF → Supabase returns a session, so we're signed in.
@@ -101,6 +118,19 @@ export default function RegisterPage() {
     >
       <form className="auth-form" onSubmit={onSubmit} noValidate>
         {formError ? <AuthBanner kind="error">{formError}</AuthBanner> : null}
+        {exists ? (
+          <AuthBanner kind="info">
+            This email is already registered.{" "}
+            <Link href="/login" className="auth-link">
+              Log in
+            </Link>{" "}
+            or{" "}
+            <Link href="/forgot-password" className="auth-link">
+              reset your password
+            </Link>
+            .
+          </AuthBanner>
+        ) : null}
         <Field
           label="Name"
           name="name"
