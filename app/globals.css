@@ -1494,6 +1494,17 @@ textarea.field-input { min-height: 92px; resize: vertical; line-height: 1.5; }
 .optin.yes { color: var(--public-text); }
 .optin.no { color: var(--text-muted); }
 
+.verify-tag {
+  display: block;
+  margin-top: 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.verify-tag.yes { color: var(--public-text); }
+.verify-tag.no { color: var(--gambler-red); }
+
 .ul-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 .ul-actions .muted { color: var(--text-faint); font-size: 13px; }
 .ul-sm-btn {

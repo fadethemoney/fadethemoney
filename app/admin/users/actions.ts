@@ -57,6 +57,34 @@ export async function deleteUser(userId: string): Promise<Result> {
   return { ok: true };
 }
 
+/**
+ * Map of userId → whether their email is verified (auth.users.email_confirmed_at).
+ * Read with the service-role admin client because verification status isn't in
+ * the profiles table and isn't exposed to the browser. Any admin may read it.
+ * Returns {} on any failure so the Users list still renders.
+ */
+export async function getVerifiedMap(): Promise<Record<string, boolean>> {
+  const me = await getProfile();
+  if (!me || (me.role !== "admin" && me.role !== "super_admin")) return {};
+
+  const admin = createSupabaseAdminClient();
+  const map: Record<string, boolean> = {};
+  try {
+    const perPage = 1000;
+    for (let page = 1; page <= 10; page++) {
+      const { data, error } = await admin.auth.admin.listUsers({ page, perPage });
+      if (error || !data) break;
+      for (const u of data.users) {
+        map[u.id] = !!(u.email_confirmed_at ?? u.confirmed_at);
+      }
+      if (data.users.length < perPage) break;
+    }
+  } catch (e) {
+    console.error("[getVerifiedMap] failed:", e instanceof Error ? e.message : e);
+  }
+  return map;
+}
+
 export async function setOptIn(userId: string, optIn: boolean): Promise<Result> {
   // Email opt-in is lower-risk than roles/deletes, so any admin may change it.
   const me = await getProfile();

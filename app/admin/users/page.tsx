@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
-import { deleteUser, setOptIn, setUserRole } from "./actions";
+import { deleteUser, getVerifiedMap, setOptIn, setUserRole } from "./actions";
 
 type Role = "customer" | "admin" | "super_admin";
 type User = {
@@ -12,6 +12,8 @@ type User = {
   role: Role;
   email_opt_in: boolean;
   created_at: string;
+  // undefined while the verification status is still loading.
+  verified?: boolean;
 };
 
 const ROLE_LABEL: Record<Role, string> = {
@@ -42,10 +44,18 @@ function joined(iso: string): string {
 }
 
 function downloadCsv(users: User[]) {
-  const header = ["Name", "Email", "Role", "Email opt-in", "Joined"];
+  const header = ["Name", "Email", "Role", "Email opt-in", "Verified", "Joined"];
   const esc = (v: string) => `"${v.replace(/"/g, '""')}"`;
+  const verifiedLabel = (v?: boolean) => (v === undefined ? "" : v ? "Verified" : "Not verified");
   const rows = users.map((u) =>
-    [u.name, u.email, ROLE_LABEL[u.role], u.email_opt_in ? "Subscribed" : "Unsubscribed", joined(u.created_at)]
+    [
+      u.name,
+      u.email,
+      ROLE_LABEL[u.role],
+      u.email_opt_in ? "Subscribed" : "Unsubscribed",
+      verifiedLabel(u.verified),
+      joined(u.created_at),
+    ]
       .map((c) => esc(String(c)))
       .join(","),
   );
@@ -93,6 +103,12 @@ export default function UsersPage() {
       const me = list.find((u) => u.id === user?.id);
       if (me) setMyRole(me.role);
       setLoading(false);
+
+      // Verification status comes from auth.users (not profiles), so fetch it
+      // via a privileged server action and merge it in once it arrives.
+      const verified = await getVerifiedMap();
+      if (!active) return;
+      setUsers((cur) => cur.map((u) => ({ ...u, verified: verified[u.id] })));
     })();
     return () => {
       active = false;
@@ -262,6 +278,11 @@ export default function UsersPage() {
                 <div className="ul-cell">
                   <span className="ul-k">Email</span>
                   <span className="ul-email">{u.email}</span>
+                  {u.verified === undefined ? null : (
+                    <span className={`verify-tag ${u.verified ? "yes" : "no"}`}>
+                      {u.verified ? "Verified" : "Not verified"}
+                    </span>
+                  )}
                 </div>
                 <div className="ul-cell">
                   <span className="ul-k">Role</span>
