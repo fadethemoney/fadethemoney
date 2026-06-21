@@ -66,6 +66,9 @@ export default function UsersPage() {
   const [loadError, setLoadError] = useState(false);
   const [notice, setNotice] = useState<{ kind: "info" | "error"; text: string }>();
   const [pending, startTransition] = useTransition();
+  const [query, setQuery] = useState("");
+  const [roleFilter, setRoleFilter] = useState<"all" | Role>("all");
+  const [optInFilter, setOptInFilter] = useState<"all" | "subscribed" | "unsubscribed">("all");
 
   const isSuper = myRole === "super_admin";
 
@@ -98,6 +101,17 @@ export default function UsersPage() {
 
   const subscribed = users.filter((u) => u.email_opt_in).length;
 
+  // Search + filter happen client-side over the already-loaded list (no extra
+  // queries). Search matches name or email; filters narrow by role and opt-in.
+  const filtered = users.filter((u) => {
+    if (roleFilter !== "all" && u.role !== roleFilter) return false;
+    if (optInFilter === "subscribed" && !u.email_opt_in) return false;
+    if (optInFilter === "unsubscribed" && u.email_opt_in) return false;
+    const q = query.trim().toLowerCase();
+    if (q && !u.name.toLowerCase().includes(q) && !u.email.toLowerCase().includes(q)) return false;
+    return true;
+  });
+
   // Run a server action, then apply `onOk` to local state when it succeeds.
   function run(action: () => Promise<{ ok: true } | { ok: false; error: string }>, onOk: () => void) {
     setNotice(undefined);
@@ -127,8 +141,9 @@ export default function UsersPage() {
     );
   }
   function exportCsv() {
-    downloadCsv(users);
-    setNotice({ kind: "info", text: `Exported ${users.length} users to CSV.` });
+    // Export what's currently shown (respects any active search/filter).
+    downloadCsv(filtered);
+    setNotice({ kind: "info", text: `Exported ${filtered.length} users to CSV.` });
   }
 
   return (
@@ -141,7 +156,7 @@ export default function UsersPage() {
           </p>
         </div>
         {isSuper ? (
-          <button className="account-btn" onClick={exportCsv} disabled={loading || users.length === 0}>
+          <button className="account-btn" onClick={exportCsv} disabled={loading || filtered.length === 0}>
             Export CSV
           </button>
         ) : null}
@@ -153,12 +168,48 @@ export default function UsersPage() {
         </div>
       ) : null}
 
+      {!loading && !loadError && users.length > 0 ? (
+        <div className="ul-toolbar">
+          <input
+            className="field-input ul-search"
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search name or email…"
+            aria-label="Search users"
+          />
+          <select
+            className="ul-filter"
+            value={roleFilter}
+            onChange={(e) => setRoleFilter(e.target.value as "all" | Role)}
+            aria-label="Filter by role"
+          >
+            <option value="all">All roles</option>
+            <option value="customer">Users</option>
+            <option value="admin">Admins</option>
+            <option value="super_admin">Super admins</option>
+          </select>
+          <select
+            className="ul-filter"
+            value={optInFilter}
+            onChange={(e) => setOptInFilter(e.target.value as "all" | "subscribed" | "unsubscribed")}
+            aria-label="Filter by email"
+          >
+            <option value="all">All email</option>
+            <option value="subscribed">Subscribed</option>
+            <option value="unsubscribed">Unsubscribed</option>
+          </select>
+        </div>
+      ) : null}
+
       {loading ? (
         <div className="nm-empty">Loading…</div>
       ) : loadError ? (
         <div className="nm-empty">Couldn&apos;t load users. Refresh to try again.</div>
       ) : users.length === 0 ? (
         <div className="nm-empty">No registered users yet.</div>
+      ) : filtered.length === 0 ? (
+        <div className="nm-empty">No users match your search.</div>
       ) : (
         <div className="ul-table" aria-busy={pending}>
           <div className="ul-head">
@@ -169,7 +220,7 @@ export default function UsersPage() {
             <div>Actions</div>
           </div>
 
-          {users.map((u) => {
+          {filtered.map((u) => {
             const manageable = isSuper && u.role !== "super_admin";
             const actions: React.ReactNode[] = [];
 

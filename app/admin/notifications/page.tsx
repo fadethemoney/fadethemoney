@@ -5,24 +5,37 @@ import { Modal } from "@/components/admin/Modal";
 import { AuthButton } from "@/components/auth/AuthButton";
 import { Field } from "@/components/auth/Field";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { emailTip } from "./actions";
 
 type Status = "draft" | "active";
-type Tip = { id: string; title: string; teamPick: string; message: string; status: Status };
+type Tip = { id: string; title: string; teamPick: string; message: string; status: Status; emailed: boolean };
 
 const EMPTY_FORM = { title: "", teamPick: "", message: "", status: "draft" as Status };
 
-// Map a notifications DB row to the UI shape.
+// Map a notifications DB row to the UI shape. emailed_at is optional because a
+// project that hasn't run migration 0003 yet won't have the column.
 function fromRow(r: {
   id: string;
   title: string;
   team_pick: string;
   message: string | null;
   status: Status;
+  emailed_at?: string | null;
 }): Tip {
-  return { id: r.id, title: r.title, teamPick: r.team_pick, message: r.message ?? "", status: r.status };
+  return {
+    id: r.id,
+    title: r.title,
+    teamPick: r.team_pick,
+    message: r.message ?? "",
+    status: r.status,
+    emailed: !!r.emailed_at,
+  };
 }
 
+// Base columns that exist on every project; the email column is queried
+// separately so the page still loads before migration 0003 is applied.
 const SELECT = "id, title, team_pick, message, status";
+const SELECT_EMAILED = `${SELECT}, emailed_at`;
 
 export default function NotificationsPage() {
   const [supabase] = useState(() => createSupabaseBrowserClient());
@@ -33,17 +46,33 @@ export default function NotificationsPage() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
+  const [emailingId, setEmailingId] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{ kind: "success" | "error"; text: string }>();
 
-  // Load existing tips (admins read all via RLS; ordered newest first).
+  // Load existing tips (admins read all via RLS; ordered newest first). Try the
+  // query with emailed_at first; if that column isn't migrated yet, fall back to
+  // the base columns so the page still works.
   useEffect(() => {
     let active = true;
     (async () => {
-      const { data, error } = await supabase
+      let rows:
+        | { id: string; title: string; team_pick: string; message: string | null; status: Status; emailed_at?: string | null }[]
+        | null = null;
+      const withEmailed = await supabase
         .from("notifications")
-        .select(SELECT)
+        .select(SELECT_EMAILED)
         .order("created_at", { ascending: false });
+      if (withEmailed.error) {
+        const base = await supabase
+          .from("notifications")
+          .select(SELECT)
+          .order("created_at", { ascending: false });
+        rows = base.data;
+      } else {
+        rows = withEmailed.data;
+      }
       if (!active) return;
-      if (!error && data) setTips(data.map(fromRow));
+      if (rows) setTips(rows.map(fromRow));
       setLoading(false);
     })();
     return () => {
@@ -96,7 +125,10 @@ export default function NotificationsPage() {
         setBusy(false);
         return;
       }
-      setTips((list) => list.map((t) => (t.id === editingId ? fromRow(data) : t)));
+      // Preserve the existing emailed flag (the update query doesn't return it).
+      setTips((list) =>
+        list.map((t) => (t.id === editingId ? { ...fromRow(data), emailed: t.emailed } : t)),
+      );
     } else {
       const {
         data: { user },
@@ -135,6 +167,32 @@ export default function NotificationsPage() {
     if (error) setTips(prev); // revert
   }
 
+  // Email an active tip to all opted-in subscribers. The server action enforces
+  // a one-time claim, so this can't double-send even on a fast double click.
+  async function emailSubscribers(t: Tip) {
+    if (t.status !== "active" || t.emailed || emailingId) return;
+    if (!window.confirm("Email this tip to all opted-in subscribers? This can only be done once.")) {
+      return;
+    }
+    setNotice(undefined);
+    setEmailingId(t.id);
+    const res = await emailTip(t.id);
+    setEmailingId(null);
+    if (res.ok) {
+      setTips((list) => list.map((x) => (x.id === t.id ? { ...x, emailed: true } : x)));
+      setNotice({
+        kind: "success",
+        text: `Sent to ${res.sent} subscriber${res.sent === 1 ? "" : "s"}.${res.failed ? ` ${res.failed} failed.` : ""}`,
+      });
+    } else {
+      // If it was already emailed, reflect that so the button locks too.
+      if (/already been emailed/i.test(res.error)) {
+        setTips((list) => list.map((x) => (x.id === t.id ? { ...x, emailed: true } : x)));
+      }
+      setNotice({ kind: "error", text: res.error });
+    }
+  }
+
   return (
     <>
       <div className="nm-head">
@@ -148,6 +206,12 @@ export default function NotificationsPage() {
           + New tip
         </button>
       </div>
+
+      {notice ? (
+        <div className={`auth-banner ${notice.kind}`} style={{ marginBottom: 16 }} role="status">
+          {notice.text}
+        </div>
+      ) : null}
 
       {loading ? (
         <div className="nm-empty">Loading…</div>
@@ -172,6 +236,21 @@ export default function NotificationsPage() {
                 <button className="nm-btn" onClick={() => toggleStatus(t.id)}>
                   {t.status === "active" ? "Move to draft" : "Activate"}
                 </button>
+                {t.status === "active" ? (
+                  t.emailed ? (
+                    <span className="nm-emailed" title="Already emailed to subscribers">
+                      Emailed ✓
+                    </span>
+                  ) : (
+                    <button
+                      className="nm-btn"
+                      disabled={emailingId === t.id}
+                      onClick={() => emailSubscribers(t)}
+                    >
+                      {emailingId === t.id ? "Sending…" : "Email subscribers"}
+                    </button>
+                  )
+                ) : null}
                 <button className="nm-btn danger" onClick={() => remove(t.id)}>
                   Delete
                 </button>

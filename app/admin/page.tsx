@@ -3,26 +3,40 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 
 type RecentTip = { id: string; title: string; team_pick: string; status: "draft" | "active"; created_at: string };
+type RecentUser = { id: string; name: string | null; email: string; created_at: string };
 
 type Dashboard = {
   totalUsers: number;
   subscribed: number;
+  newThisWeek: number;
   totalTips: number;
   activeTips: number;
   recent: RecentTip[];
+  recentUsers: RecentUser[];
   error: boolean;
 };
 
-const EMPTY: Dashboard = { totalUsers: 0, subscribed: 0, totalTips: 0, activeTips: 0, recent: [], error: false };
+const EMPTY: Dashboard = {
+  totalUsers: 0,
+  subscribed: 0,
+  newThisWeek: 0,
+  totalTips: 0,
+  activeTips: 0,
+  recent: [],
+  recentUsers: [],
+  error: false,
+};
 
 /** Real counts + recent tips. Runs as the logged-in admin, so RLS lets it read
  *  every profile and notification. Falls back to zeros in mock mode (no env). */
 async function loadDashboard(): Promise<Dashboard> {
   if (!isSupabaseConfigured) return EMPTY;
   const supabase = await createSupabaseServerClient();
-  const [users, subs, tips, active, recent] = await Promise.all([
+  const weekAgo = new Date(Date.now() - 7 * 86_400_000).toISOString();
+  const [users, subs, week, tips, active, recent, recentUsers] = await Promise.all([
     supabase.from("profiles").select("id", { count: "exact", head: true }),
     supabase.from("profiles").select("id", { count: "exact", head: true }).eq("email_opt_in", true),
+    supabase.from("profiles").select("id", { count: "exact", head: true }).gte("created_at", weekAgo),
     supabase.from("notifications").select("id", { count: "exact", head: true }),
     supabase.from("notifications").select("id", { count: "exact", head: true }).eq("status", "active"),
     supabase
@@ -30,15 +44,23 @@ async function loadDashboard(): Promise<Dashboard> {
       .select("id, title, team_pick, status, created_at")
       .order("created_at", { ascending: false })
       .limit(5),
+    supabase
+      .from("profiles")
+      .select("id, name, email, created_at")
+      .order("created_at", { ascending: false })
+      .limit(5),
   ]);
-  const firstError = users.error || subs.error || tips.error || active.error || recent.error;
+  const firstError =
+    users.error || subs.error || week.error || tips.error || active.error || recent.error || recentUsers.error;
   if (firstError) console.error("[admin/dashboard] load error:", firstError);
   return {
     totalUsers: users.count ?? 0,
     subscribed: subs.count ?? 0,
+    newThisWeek: week.count ?? 0,
     totalTips: tips.count ?? 0,
     activeTips: active.count ?? 0,
     recent: (recent.data as RecentTip[] | null) ?? [],
+    recentUsers: (recentUsers.data as RecentUser[] | null) ?? [],
     error: !!firstError,
   };
 }
@@ -58,8 +80,8 @@ function ago(iso: string): string {
 export default async function AdminDashboardPage() {
   const d = await loadDashboard();
   const stats = [
-    { label: "Total users", value: String(d.totalUsers), trend: "registered" },
-    { label: "Email opt-in", value: String(d.subscribed), trend: "subscribed to email" },
+    { label: "Total users", value: String(d.totalUsers), trend: `${d.subscribed} subscribed` },
+    { label: "New this week", value: String(d.newThisWeek), trend: "last 7 days" },
     { label: "Tips posted", value: String(d.totalTips), trend: "all time" },
     { label: "Active tips", value: String(d.activeTips), trend: "live now" },
   ];
@@ -100,6 +122,24 @@ export default async function AdminDashboardPage() {
                   </div>
                 </div>
                 <span className={`tip-status ${t.status}`}>{t.status}</span>
+              </div>
+            ))
+          )}
+        </div>
+
+        <div className="admin-panel">
+          <div className="admin-panel-title">Recent registrations</div>
+          {d.recentUsers.length === 0 ? (
+            <div className="nm-empty">No registrations yet.</div>
+          ) : (
+            d.recentUsers.map((u) => (
+              <div className="tip-row" key={u.id}>
+                <div className="tip-main">
+                  <div className="tip-title">{u.name || "—"}</div>
+                  <div className="tip-meta">
+                    {u.email} · {ago(u.created_at)}
+                  </div>
+                </div>
               </div>
             ))
           )}

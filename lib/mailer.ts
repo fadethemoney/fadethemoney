@@ -142,6 +142,112 @@ export async function sendWelcomeEmail(to: string, name?: string): Promise<Notif
   }
 }
 
+export interface TipEmailContent {
+  title: string;
+  teamPick: string;
+  message?: string;
+}
+
+export interface TipBlastResult {
+  ok: boolean;
+  sent: number;
+  failed: number;
+  skipped?: boolean;
+  error?: string;
+}
+
+const BATCH_SIZE = 100; // Resend's per-call cap for batch sends.
+
+/**
+ * Email an active tip to a list of opted-in subscribers via Resend.
+ *
+ * One message per recipient (never a shared To/CC), so addresses never leak
+ * between users. Sends are chunked through Resend's batch API. Uses the verified
+ * fadethemoney.com sender because these go to arbitrary users (the
+ * onboarding@resend.dev default only delivers to your own inbox).
+ *
+ * Pure send helper: it does NOT decide who gets the email or guard against
+ * double-sends — the calling server action owns the recipient query and the
+ * one-time claim. Best-effort and never throws.
+ */
+export async function sendTipEmail(
+  recipients: string[],
+  tip: TipEmailContent,
+): Promise<TipBlastResult> {
+  const { RESEND_API_KEY, TIP_FROM, WELCOME_FROM, NEXT_PUBLIC_SITE_URL } = process.env;
+  if (!RESEND_API_KEY) {
+    console.warn("[mailer] Resend not configured — skipping tip email");
+    return { ok: false, sent: 0, failed: 0, skipped: true, error: "missing RESEND_API_KEY" };
+  }
+  const to = recipients.map((e) => (e ?? "").trim()).filter(Boolean);
+  if (to.length === 0) return { ok: true, sent: 0, failed: 0, skipped: true, error: "no recipients" };
+
+  const resend = new Resend(RESEND_API_KEY);
+  const from = TIP_FROM ?? WELCOME_FROM ?? "Fade The Money <noreply@fadethemoney.com>";
+  const site = (NEXT_PUBLIC_SITE_URL ?? "https://fadethemoney.com").replace(/\/$/, "");
+
+  const subject = `New pick: ${tip.title}`;
+  const safeTitle = escapeHtml(tip.title);
+  const safePick = escapeHtml(tip.teamPick);
+  const safeMessage = tip.message ? escapeHtml(tip.message).replace(/\n/g, "<br>") : "";
+  const text =
+    `${tip.title}\n\n` +
+    `Pick: ${tip.teamPick}\n` +
+    (tip.message ? `\n${tip.message}\n` : "") +
+    `\nOpen your dashboard: ${site}\n\n` +
+    `For entertainment only · 21+. If you or someone you know has a gambling problem, call 1-800-GAMBLER.`;
+
+  const html = `<div style="font-family:-apple-system,Segoe UI,sans-serif;background:#FAFAF7;padding:24px;margin:0">
+    <div style="max-width:520px;margin:0 auto;background:#FFFFFF;border:1px solid #E5E3DC;border-radius:12px;overflow:hidden">
+      <div style="background:#1B45D9;padding:18px 24px">
+        <span style="color:#FFFFFF;font-size:18px;font-weight:600;letter-spacing:-0.02em">Fade The Money</span>
+      </div>
+      <div style="padding:24px">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.08em;color:#1B45D9;text-transform:uppercase;margin:0 0 6px">New pick</div>
+        <h1 style="font-size:20px;color:#1A1A1A;margin:0 0 8px">${safeTitle}</h1>
+        <p style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#1B45D9;margin:0 0 16px">${safePick}</p>
+        ${safeMessage ? `<p style="font-size:15px;line-height:1.55;color:#3A3A38;margin:0 0 16px">${safeMessage}</p>` : ""}
+        <a href="${site}" style="display:inline-block;background:#1B45D9;color:#FFFFFF;text-decoration:none;font-weight:500;font-size:15px;padding:11px 20px;border-radius:6px">
+          See it on your dashboard →
+        </a>
+      </div>
+      <div style="padding:16px 24px;border-top:1px solid #E5E3DC">
+        <p style="font-size:12px;color:#888780;margin:0;line-height:1.5">
+          For entertainment only · 21+. If you or someone you know has a gambling
+          problem, call <strong>1-800-GAMBLER</strong>.
+        </p>
+      </div>
+    </div>
+  </div>`;
+
+  let sent = 0;
+  let failed = 0;
+  let lastError: string | undefined;
+
+  for (let i = 0; i < to.length; i += BATCH_SIZE) {
+    const chunk = to.slice(i, i + BATCH_SIZE);
+    try {
+      const res = await resend.batch.send(
+        chunk.map((recipient) => ({ from, to: recipient, subject, text, html })),
+      );
+      if (res.error) {
+        failed += chunk.length;
+        lastError = JSON.stringify(res.error);
+        console.error("[mailer] tip batch error:", res.error);
+      } else {
+        sent += chunk.length;
+      }
+    } catch (e) {
+      failed += chunk.length;
+      lastError = e instanceof Error ? e.message : String(e);
+      console.error("[mailer] tip batch exception:", lastError);
+    }
+  }
+
+  console.log(`[mailer] tip "${tip.title}" → sent ${sent}, failed ${failed}`);
+  return { ok: failed === 0 && sent > 0, sent, failed, error: lastError };
+}
+
 function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) =>
     c === "&" ? "&amp;" :
