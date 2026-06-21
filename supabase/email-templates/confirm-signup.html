@@ -1,0 +1,43 @@
+<!--
+  Fade The Money — branded "Confirm signup" email.
+
+  Paste this into: Supabase Dashboard → Authentication → Email Templates →
+  "Confirm signup" → message body (switch the editor to source/HTML).
+
+  Supabase substitutes {{ .ConfirmationURL }} with the real verify link. Keep
+  that variable exactly as-is. Requires "Confirm email" ON + Custom SMTP (Resend)
+  so the email actually delivers — see supabase/migrations notes / project memory.
+
+  Subject line to set above the body:
+    Verify your email — Fade The Money
+-->
+<div style="font-family:-apple-system,Segoe UI,sans-serif;background:#FAFAF7;padding:24px;margin:0">
+  <div style="max-width:520px;margin:0 auto;background:#FFFFFF;border:1px solid #E5E3DC;border-radius:12px;overflow:hidden">
+    <div style="background:#1B45D9;padding:18px 24px">
+      <span style="color:#FFFFFF;font-size:18px;font-weight:600;letter-spacing:-0.02em">Fade The Money</span>
+    </div>
+    <div style="padding:24px">
+      <h1 style="font-size:20px;color:#1A1A1A;margin:0 0 12px">Confirm your email</h1>
+      <p style="font-size:15px;line-height:1.55;color:#3A3A38;margin:0 0 16px">
+        Thanks for signing up. Click the button below to verify this email address
+        and activate your Fade The Money account.
+      </p>
+      <a href="{{ .ConfirmationURL }}" style="display:inline-block;background:#1B45D9;color:#FFFFFF;text-decoration:none;font-weight:500;font-size:15px;padding:11px 20px;border-radius:6px">
+        Verify my email →
+      </a>
+      <p style="font-size:13px;line-height:1.5;color:#888780;margin:18px 0 0">
+        If the button doesn't work, copy and paste this link into your browser:<br>
+        <a href="{{ .ConfirmationURL }}" style="color:#1B45D9;word-break:break-all">{{ .ConfirmationURL }}</a>
+      </p>
+      <p style="font-size:13px;line-height:1.5;color:#888780;margin:14px 0 0">
+        Didn't create an account? You can safely ignore this email.
+      </p>
+    </div>
+    <div style="padding:16px 24px;border-top:1px solid #E5E3DC">
+      <p style="font-size:12px;color:#888780;margin:0;line-height:1.5">
+        For entertainment only · 21+. If you or someone you know has a gambling
+        problem, call <strong>1-800-GAMBLER</strong>.
+      </p>
+    </div>
+  </div>
+</div>
