@@ -5,6 +5,8 @@ import { GamesSection } from "@/components/GamesSection";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { StreakBanner } from "@/components/StreakBanner";
 import { LeagueFilter } from "@/components/LeagueFilter";
+import { NewsSection } from "@/components/NewsSection";
+import { getPublishedArticles } from "@/lib/articles";
 import type { Game } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -64,7 +66,7 @@ export default async function HomePage({
   searchParams: Promise<{ league?: string }>;
 }) {
   const { league } = await searchParams;
-  const store = await readStore();
+  const [store, latestNews] = await Promise.all([readStore(), getPublishedArticles(8)]);
   const today = todayKey();
   const tomorrow = nextDayKey(today);
   const leagueFiltered = league ? store.games.filter((g) => g.league === league) : store.games;
@@ -166,6 +168,8 @@ export default async function HomePage({
           </>
         )}
       </div>
+
+      <NewsSection articles={latestNews} />
 
       <section className="editorial">
         <div className="container">

@@ -18,6 +18,7 @@ export async function SiteHeader() {
           <div className="nav-links">
             <Link href="/">Dashboard</Link>
             <Link href="/results">Results</Link>
+            <Link href="/blog">News</Link>
             <Link href="/about">About</Link>
             {profile ? (
               <UserMenu
