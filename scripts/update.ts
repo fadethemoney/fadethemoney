@@ -123,8 +123,10 @@ async function run() {
       await notifyAdmin({ subject: email.subject, text: email.text });
       ls.total = { ...ls.total, lastNotifiedCount: email.newLastNotifiedCount };
     }
+    // Moneyline streak EMAILS disabled 2026-06-22 at the client's request
+    // (mirrors app/api/refresh). Still advance lastNotifiedCount so the on-site
+    // moneyline streak keeps tracking; restore notifyAdmin to re-enable.
     for (const email of buildMoneylineEmails(league, ls.moneyline, gameByIdPer)) {
-      await notifyAdmin({ subject: email.subject, text: email.text });
       ls.moneyline = { ...ls.moneyline, lastNotifiedCount: email.newLastNotifiedCount };
     }
     perLeague[league] = ls;

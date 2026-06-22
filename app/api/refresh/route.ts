@@ -124,12 +124,12 @@ async function runRefresh(opts: { hoursBack?: number; hoursForward?: number } = 
       }
       ls.total = { ...ls.total, lastNotifiedCount: email.newLastNotifiedCount };
     }
+    // Moneyline streak EMAILS disabled 2026-06-22 at the client's request
+    // ("stop the moneyline streak count to email" — the 3rd / last-added streak
+    // category). We still advance lastNotifiedCount so the on-site moneyline
+    // streak keeps tracking and re-enabling later won't dump a backlog of past
+    // milestones. To re-enable, restore the notifyAdmin call inside this loop.
     for (const email of buildMoneylineEmails(league, ls.moneyline, gameByIdPer, nextGame)) {
-      try {
-        await notifyAdmin({ subject: email.subject, text: email.text });
-      } catch (e) {
-        console.warn("[refresh] notifyAdmin (moneyline) failed:", (e as Error).message);
-      }
       ls.moneyline = { ...ls.moneyline, lastNotifiedCount: email.newLastNotifiedCount };
     }
     perLeague[league] = ls;
