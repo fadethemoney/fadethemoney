@@ -1,6 +1,5 @@
 "use server";
 
-import DOMPurify from "isomorphic-dompurify";
 import { getProfile } from "@/lib/auth";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { slugify } from "@/lib/articles";
@@ -41,10 +40,16 @@ async function requireAdmin(): Promise<{ ok: true; id: string } | { ok: false; e
   return { ok: true, id: me.id };
 }
 
-function cleanInput(input: ArticleInput) {
+async function cleanInput(input: ArticleInput) {
   const title = input.title.trim();
   const excerpt = input.excerpt.trim();
   const coverImage = input.coverImage.trim();
+  // Loaded lazily (not a top-level import) because isomorphic-dompurify pulls in
+  // jsdom, which fails to bundle on Vercel's serverless runtime. A top-level
+  // import throws at module load — before any try/catch — and Next.js masks it
+  // as a generic error. Importing here keeps any failure inside the caller's
+  // try/catch so the real message surfaces.
+  const { default: DOMPurify } = await import("isomorphic-dompurify");
   const body = DOMPurify.sanitize(input.body ?? "", SANITIZE);
   const status: Status = input.status === "published" ? "published" : "draft";
   return { title, excerpt, coverImage, body, status };
@@ -69,7 +74,7 @@ export async function createArticle(input: ArticleInput): Promise<SaveResult> {
     const guard = await requireAdmin();
     if (!guard.ok) return { ok: false, error: guard.error };
 
-    const c = cleanInput(input);
+    const c = await cleanInput(input);
     if (!c.title) return { ok: false, error: "Title is required." };
 
     const admin = createSupabaseAdminClient();
@@ -100,7 +105,7 @@ export async function updateArticle(id: string, input: ArticleInput): Promise<Sa
     const guard = await requireAdmin();
     if (!guard.ok) return { ok: false, error: guard.error };
 
-    const c = cleanInput(input);
+    const c = await cleanInput(input);
     if (!c.title) return { ok: false, error: "Title is required." };
 
     const admin = createSupabaseAdminClient();
