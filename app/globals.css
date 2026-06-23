@@ -1591,6 +1591,31 @@ textarea.field-input { min-height: 92px; resize: vertical; line-height: 1.5; }
 @media (min-width: 560px) { .news-grid { grid-template-columns: repeat(2, 1fr); } }
 @media (min-width: 920px) { .news-grid { grid-template-columns: repeat(4, 1fr); } }
 
+/* Mobile (<560px): homepage "Latest News" scrolls horizontally as a snap
+   carousel instead of stacking into one tall column. Scoped to .news-section
+   so the /blog list page keeps its full vertical grid. The -18px bleed +
+   18px padding matches the mobile .container padding so cards run edge to
+   edge while the first/last align with the page content. */
+@media (max-width: 559.98px) {
+  .news-section .news-grid {
+    display: flex;
+    grid-template-columns: none;
+    gap: 14px;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    scroll-padding: 0 18px;
+    -webkit-overflow-scrolling: touch;
+    margin: 0 -18px;
+    padding: 0 18px 4px;
+    scrollbar-width: none; /* Firefox */
+  }
+  .news-section .news-grid::-webkit-scrollbar { display: none; } /* WebKit */
+  .news-section .news-card {
+    flex: 0 0 78%;
+    scroll-snap-align: start;
+  }
+}
+
 .news-card {
   display: flex;
   flex-direction: column;
