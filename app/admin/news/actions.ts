@@ -1,5 +1,6 @@
 "use server";
 
+import sanitizeHtml from "sanitize-html";
 import { getProfile } from "@/lib/auth";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { slugify } from "@/lib/articles";
@@ -23,12 +24,20 @@ type ArticleInput = {
 type SaveResult = { ok: true; id: string; slug: string } | { ok: false; error: string };
 type Result = { ok: true } | { ok: false; error: string };
 
-const SANITIZE = {
-  ALLOWED_TAGS: [
+// sanitize-html (pure JS, no jsdom) — serverless-safe on Vercel. Mirrors the
+// previous DOMPurify allowlist: same tags, href/target/rel on links, src/alt on
+// images, title anywhere. Anything else (scripts, styles, classes, etc.) is
+// stripped. Only https/http/mailto/etc. URLs survive, so data: URIs are dropped.
+const SANITIZE: sanitizeHtml.IOptions = {
+  allowedTags: [
     "p", "br", "strong", "em", "u", "s", "h1", "h2", "h3", "blockquote",
     "ul", "ol", "li", "a", "img", "code", "pre", "hr",
   ],
-  ALLOWED_ATTR: ["href", "target", "rel", "src", "alt", "title"],
+  allowedAttributes: {
+    a: ["href", "target", "rel", "title"],
+    img: ["src", "alt", "title"],
+    "*": ["title"],
+  },
 };
 
 async function requireAdmin(): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
@@ -40,17 +49,11 @@ async function requireAdmin(): Promise<{ ok: true; id: string } | { ok: false; e
   return { ok: true, id: me.id };
 }
 
-async function cleanInput(input: ArticleInput) {
+function cleanInput(input: ArticleInput) {
   const title = input.title.trim();
   const excerpt = input.excerpt.trim();
   const coverImage = input.coverImage.trim();
-  // Loaded lazily (not a top-level import) because isomorphic-dompurify pulls in
-  // jsdom, which fails to bundle on Vercel's serverless runtime. A top-level
-  // import throws at module load — before any try/catch — and Next.js masks it
-  // as a generic error. Importing here keeps any failure inside the caller's
-  // try/catch so the real message surfaces.
-  const { default: DOMPurify } = await import("isomorphic-dompurify");
-  const body = DOMPurify.sanitize(input.body ?? "", SANITIZE);
+  const body = sanitizeHtml(input.body ?? "", SANITIZE);
   const status: Status = input.status === "published" ? "published" : "draft";
   return { title, excerpt, coverImage, body, status };
 }
@@ -74,7 +77,7 @@ export async function createArticle(input: ArticleInput): Promise<SaveResult> {
     const guard = await requireAdmin();
     if (!guard.ok) return { ok: false, error: guard.error };
 
-    const c = await cleanInput(input);
+    const c = cleanInput(input);
     if (!c.title) return { ok: false, error: "Title is required." };
 
     const admin = createSupabaseAdminClient();
@@ -105,7 +108,7 @@ export async function updateArticle(id: string, input: ArticleInput): Promise<Sa
     const guard = await requireAdmin();
     if (!guard.ok) return { ok: false, error: guard.error };
 
-    const c = await cleanInput(input);
+    const c = cleanInput(input);
     if (!c.title) return { ok: false, error: "Title is required." };
 
     const admin = createSupabaseAdminClient();
