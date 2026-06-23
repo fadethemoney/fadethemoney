@@ -65,67 +65,75 @@ async function uniqueSlug(
 }
 
 export async function createArticle(input: ArticleInput): Promise<SaveResult> {
-  const guard = await requireAdmin();
-  if (!guard.ok) return { ok: false, error: guard.error };
+  try {
+    const guard = await requireAdmin();
+    if (!guard.ok) return { ok: false, error: guard.error };
 
-  const c = cleanInput(input);
-  if (!c.title) return { ok: false, error: "Title is required." };
+    const c = cleanInput(input);
+    if (!c.title) return { ok: false, error: "Title is required." };
 
-  const admin = createSupabaseAdminClient();
-  const slug = await uniqueSlug(admin, slugify(c.title));
-  const { data, error } = await admin
-    .from("articles")
-    .insert({
-      slug,
-      title: c.title,
-      excerpt: c.excerpt || null,
-      cover_image: c.coverImage || null,
-      body: c.body,
-      status: c.status,
-      author_id: guard.id,
-      published_at: c.status === "published" ? new Date().toISOString() : null,
-    })
-    .select("id, slug")
-    .single();
-  if (error || !data) return { ok: false, error: error?.message ?? "Could not create the article." };
-  return { ok: true, id: data.id, slug: data.slug };
+    const admin = createSupabaseAdminClient();
+    const slug = await uniqueSlug(admin, slugify(c.title));
+    const { data, error } = await admin
+      .from("articles")
+      .insert({
+        slug,
+        title: c.title,
+        excerpt: c.excerpt || null,
+        cover_image: c.coverImage || null,
+        body: c.body,
+        status: c.status,
+        author_id: guard.id,
+        published_at: c.status === "published" ? new Date().toISOString() : null,
+      })
+      .select("id, slug")
+      .single();
+    if (error || !data) return { ok: false, error: error?.message ?? "Could not create the article." };
+    return { ok: true, id: data.id, slug: data.slug };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Could not create the article." };
+  }
 }
 
 export async function updateArticle(id: string, input: ArticleInput): Promise<SaveResult> {
-  const guard = await requireAdmin();
-  if (!guard.ok) return { ok: false, error: guard.error };
+  try {
+    const guard = await requireAdmin();
+    if (!guard.ok) return { ok: false, error: guard.error };
 
-  const c = cleanInput(input);
-  if (!c.title) return { ok: false, error: "Title is required." };
+    const c = cleanInput(input);
+    if (!c.title) return { ok: false, error: "Title is required." };
 
-  const admin = createSupabaseAdminClient();
-  const { data: existing } = await admin
-    .from("articles")
-    .select("status, published_at")
-    .eq("id", id)
-    .maybeSingle();
-  if (!existing) return { ok: false, error: "Article not found." };
+    const admin = createSupabaseAdminClient();
+    const { data: existing } = await admin
+      .from("articles")
+      .select("status, published_at")
+      .eq("id", id)
+      .maybeSingle();
+    if (!existing) return { ok: false, error: "Article not found." };
 
-  // Stamp published_at the first time it goes live; keep it once set.
-  let publishedAt = existing.published_at as string | null;
-  if (c.status === "published" && !publishedAt) publishedAt = new Date().toISOString();
-  if (c.status === "draft") publishedAt = null;
+    // Stamp published_at the first time it goes live; keep it once set.
+    let publishedAt = existing.published_at as string | null;
+    if (c.status === "published" && !publishedAt) publishedAt = new Date().toISOString();
+    if (c.status === "draft") publishedAt = null;
 
-  const { data, error } = await admin
-    .from("articles")
-    .update({
-      title: c.title,
-      excerpt: c.excerpt || null,
-      cover_image: c.coverImage || null,
-      body: c.body,
-      status: c.status,
-      published_at: publishedAt,
-    })
-    .eq("id", id)
-    .select("id, slug")
-    .single();
-  if (error || !data) return { ok: false, error: error?.message ?? "Could not save the article." };
-  return { ok: true, id: data.id, slug: data.slug };
+    const { data, error } = await admin
+      .from("articles")
+      .update({
+        title: c.title,
+        excerpt: c.excerpt || null,
+        cover_image: c.coverImage || null,
+        body: c.body,
+        status: c.status,
+        published_at: publishedAt,
+      })
+      .eq("id", id)
+      .select("id, slug")
+      .single();
+    if (error || !data) return { ok: false, error: error?.message ?? "Could not save the article." };
+    return { ok: true, id: data.id, slug: data.slug };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Could not save the article." };
+  }
 }
 
 export async function setArticleStatus(id: string, status: Status): Promise<Result> {

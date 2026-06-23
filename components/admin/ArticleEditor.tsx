@@ -101,10 +101,18 @@ export function ArticleEditor({ article }: { article?: EditorArticle }) {
     setSaving(true);
     setError(undefined);
     const input = { title, excerpt, coverImage, body: editor.getHTML(), status: finalStatus };
-    const res = article ? await updateArticle(article.id, input) : await createArticle(input);
-    if (!res.ok) {
+    try {
+      const res = article ? await updateArticle(article.id, input) : await createArticle(input);
+      if (!res.ok) {
+        setSaving(false);
+        setError(res.error);
+        return;
+      }
+    } catch (err) {
+      // Backstop: a server action that throws (e.g. misconfigured server) would
+      // otherwise leave the button stuck on "Saving…" with no message.
       setSaving(false);
-      setError(res.error);
+      setError(err instanceof Error ? err.message : "Something went wrong saving the article.");
       return;
     }
     setStatus(finalStatus);
