@@ -6,14 +6,17 @@ import { summarizeDay, todayKey } from "@/lib/calc";
 import { etDateKeyOf } from "@/lib/time";
 import { notifyAdmin } from "@/lib/mailer";
 import {
-  applyGameToLeagueStreaks,
+  atsWinnerOf,
   buildAtsEmails,
   buildMoneylineEmails,
   buildTotalEmails,
   findNextGame,
   getLeagueStreaks,
+  moneylineWinnerOf,
+  totalWinnerOf,
+  updateCategoryStreak,
 } from "@/lib/streak";
-import type { League, LeagueStreaks, StreakState } from "@/lib/types";
+import type { League, LeagueStreaks } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -64,51 +67,35 @@ async function runRefresh(opts: { hoursBack?: number; hoursForward?: number } = 
   const todays = store.games.filter((g) => etDateKeyOf(g.startTime) === today);
   const summary = summarizeDay(todays);
   await recordDaily(today, { ...summary, games: todays.map((g) => g.id) });
-  const streak: StreakState = { ...store.streak };
-  for (const g of todays.filter((g) => g.status === "final" && g.finalResult)) {
-    const c = g.finalResult!.publicCovered;
-    if (c === null) continue;
-    const winner = c ? "public" : "vegas";
-    if (streak.history.find((h) => h.date === `${today}:${g.id}`)) continue;
-    if (streak.current === winner) streak.count += 1;
-    else { streak.current = winner; streak.count = 1; streak.lastNotifiedCount = 0; }
-    streak.history.unshift({ date: `${today}:${g.id}`, winner });
-  }
-  streak.history = streak.history.slice(0, 50);
-  // The detail-less global streak email ("vegas has won 2 bets in a row.")
-  // was retired per client direction — the per-league emails below already
-  // produce a properly formatted alert with team names, scores, and outcome.
-  // We still maintain the streak counter itself so the homepage hero eyebrow
-  // and StreakBanner keep working.
-  if (streak.count > streak.lastNotifiedCount) {
-    streak.lastNotifiedCount = streak.count;
-  }
-  await setStreak(streak);
+  // Confirmed finals only — a game we've carried as final with a settled box
+  // score across at least two refreshes (see upsertGames). Grading the instant
+  // the odds feed first flags a game final risks locking an in-progress score the
+  // feed sent as if final (the LAD 2-1 / real 12-3 bug); waiting one cycle lets
+  // it settle.
+  const confirmedFinals = store.games.filter(
+    (g) => g.status === "final" && g.finalResult && g.confirmedFinal,
+  );
+  const gameById = new Map(store.games.map((g) => [g.id, g]));
 
-  // Per-league × per-category (ATS + Total) streaks with separate emails.
-  // Use the locked, post-finalResult-attach data from `todays` (store-backed)
-  // — never the live `all` array, whose verdicts may be stale.
+  // Global cross-league ATS streak (homepage hero eyebrow + StreakBanner). The
+  // detail-less global email was retired earlier; the per-league emails below
+  // carry the formatted alerts. Re-graded from current stored scores each tick,
+  // so a verdict that changes after a late box-score correction self-heals.
+  const globalStreak = updateCategoryStreak(store.streak, confirmedFinals, gameById, atsWinnerOf);
+  await setStreak(globalStreak);
+
+  // Per-league × per-category (ATS + Total + Moneyline) streaks with emails.
   const perLeague: Partial<Record<League, LeagueStreaks>> = { ...(store.streaks ?? {}) };
-  // NOTE: A legacy public/vegas→over/under total-streak migration used to live
-  // here. It was removed 2026-06-13: the totals schema flipped *back* to
-  // public/vegas (favorite-of-total semantics), so the migration matched every
-  // current total streak and wiped it on every refresh — resetting
-  // lastNotifiedCount to 0 and re-sending the same milestone total emails every
-  // cron tick. Removing it lets lastNotifiedCount persist so each milestone
-  // emails exactly once.
-  for (const g of todays.filter((g) => g.status === "final" && g.finalResult)) {
-    const prev = getLeagueStreaks(perLeague, g.league);
-    perLeague[g.league] = applyGameToLeagueStreaks(prev, g, today);
-  }
-  const afterPer = await readStore();
-  const gameByIdPer = new Map(afterPer.games.map((g) => [g.id, g]));
   for (const league of LEAGUES) {
-    if (!perLeague[league]) continue;
-    // Normalize so older stored data missing the moneyline category is
-    // backfilled before we read/write it.
-    const ls = getLeagueStreaks(perLeague, league);
-    const nextGame = findNextGame(afterPer.games, league);
-    for (const email of buildAtsEmails(league, ls.ats, gameByIdPer, nextGame)) {
+    const prev = getLeagueStreaks(perLeague, league);
+    const lf = confirmedFinals.filter((g) => g.league === league);
+    const ls: LeagueStreaks = {
+      ats: updateCategoryStreak(prev.ats, lf, gameById, atsWinnerOf),
+      total: updateCategoryStreak(prev.total, lf, gameById, totalWinnerOf),
+      moneyline: updateCategoryStreak(prev.moneyline, lf, gameById, moneylineWinnerOf),
+    };
+    const nextGame = findNextGame(store.games, league);
+    for (const email of buildAtsEmails(league, ls.ats, gameById, nextGame)) {
       try {
         await notifyAdmin({ subject: email.subject, text: email.text });
       } catch (e) {
@@ -116,7 +103,7 @@ async function runRefresh(opts: { hoursBack?: number; hoursForward?: number } = 
       }
       ls.ats = { ...ls.ats, lastNotifiedCount: email.newLastNotifiedCount };
     }
-    for (const email of buildTotalEmails(league, ls.total, gameByIdPer, nextGame)) {
+    for (const email of buildTotalEmails(league, ls.total, gameById, nextGame)) {
       try {
         await notifyAdmin({ subject: email.subject, text: email.text });
       } catch (e) {
@@ -124,19 +111,18 @@ async function runRefresh(opts: { hoursBack?: number; hoursForward?: number } = 
       }
       ls.total = { ...ls.total, lastNotifiedCount: email.newLastNotifiedCount };
     }
-    // Moneyline streak EMAILS disabled 2026-06-22 at the client's request
-    // ("stop the moneyline streak count to email" — the 3rd / last-added streak
-    // category). We still advance lastNotifiedCount so the on-site moneyline
-    // streak keeps tracking and re-enabling later won't dump a backlog of past
-    // milestones. To re-enable, restore the notifyAdmin call inside this loop.
-    for (const email of buildMoneylineEmails(league, ls.moneyline, gameByIdPer, nextGame)) {
+    // Moneyline streak EMAILS disabled 2026-06-22 at the client's request. We
+    // still advance lastNotifiedCount so the on-site moneyline streak keeps
+    // tracking and re-enabling later won't dump a backlog. To re-enable, restore
+    // the notifyAdmin call inside this loop.
+    for (const email of buildMoneylineEmails(league, ls.moneyline, gameById, nextGame)) {
       ls.moneyline = { ...ls.moneyline, lastNotifiedCount: email.newLastNotifiedCount };
     }
     perLeague[league] = ls;
   }
   await setLeagueStreaks(perLeague);
 
-  return { ok: true, count: all.length, streak, streaks: perLeague, fetchErrors };
+  return { ok: true, count: all.length, streak: globalStreak, streaks: perLeague, fetchErrors };
 }
 
 function authorize(req: Request): NextResponse | null {

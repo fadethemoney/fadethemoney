@@ -136,7 +136,17 @@ export async function upsertGames(incoming: Game[]): Promise<DataStore> {
     const started = Number.isFinite(startMs) && startMs <= now;
     let lockedTrend = existing?.trend ?? g.trend;
     if (started && !existing?.trend) lockedTrend = undefined;
-    map.set(g.id, { ...existing, ...g, trend: lockedTrend });
+    // Confirm a final only once we've carried it as final across two refreshes.
+    // The odds feed can briefly report a game final while its box score still
+    // shows an in-progress number; waiting one cycle lets the score settle before
+    // streaks grade it. The score itself still updates every tick (incoming `g`
+    // wins the spread below), so a late correction is picked up and re-graded —
+    // see updateCategoryStreak in lib/streak.ts.
+    const confirmedFinal =
+      g.status === "final"
+        ? existing?.confirmedFinal === true || existing?.status === "final"
+        : false;
+    map.set(g.id, { ...existing, ...g, trend: lockedTrend, confirmedFinal });
   }
   store.games = Array.from(map.values()).sort(
     (a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime(),

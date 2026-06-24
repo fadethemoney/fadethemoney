@@ -50,6 +50,14 @@ export interface Game {
   away: Team;
   trend?: BettingTrend;
   publicCovering?: boolean | null; // null = push / unknown; true = favorite covers
+  /**
+   * True once we've seen this game reported final with a stable box score across
+   * at least two refreshes. Streaks only grade confirmed finals — this guards
+   * against the odds feed flagging a game final while its score is still catching
+   * up to the true final (a mid-game number sent as if final). Set in
+   * upsertGames (lib/storage.ts).
+   */
+  confirmedFinal?: boolean;
   finalResult?: {
     winnerSide: Side;
     margin: number;

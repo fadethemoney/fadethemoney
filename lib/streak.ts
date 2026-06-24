@@ -9,7 +9,7 @@ import type {
   TotalWinner,
 } from "./types";
 import { totalFavoriteSide } from "./calc";
-import { etKickoffLabel } from "./time";
+import { etDateKeyOf, etKickoffLabel } from "./time";
 
 export const LEAGUES_ALL: League[] = ["nba", "wnba", "mlb", "nfl", "nhl"];
 
@@ -112,6 +112,106 @@ export function applyGameToLeagueStreaks(
     if (updated) next = { ...next, moneyline: updated };
   }
   return next;
+}
+
+/** Game id embedded in a streak history key ("YYYY-MM-DD:eventId"). */
+function streakHistoryGameId(date: string): string {
+  return date.split(":").slice(1).join(":");
+}
+
+// Per-category winner of a single confirmed final, or null when it doesn't
+// count toward a streak (push, or a missing line so it can't be graded). These
+// mirror the verdicts in applyGameToLeagueStreaks so the recompute below and the
+// legacy incremental path agree.
+export function atsWinnerOf(g: Game): AtsWinner | null {
+  const c = g.finalResult?.publicCovered;
+  if (c === null || c === undefined) return null;
+  return c ? "public" : "vegas";
+}
+
+export function totalWinnerOf(g: Game): TotalWinner | null {
+  const over = g.finalResult?.totalGoOver;
+  const fav = totalFavoriteSide(g.trend);
+  if (over === null || over === undefined || fav === null) return null;
+  const favWon = fav === (over ? "over" : "under");
+  return favWon ? "public" : "vegas";
+}
+
+export function moneylineWinnerOf(g: Game): MoneylineWinner | null {
+  const favSide = g.trend?.pickedSide;
+  const winnerSide = g.finalResult?.winnerSide;
+  if (!favSide || !winnerSide) return null;
+  return winnerSide === favSide ? "public" : "vegas";
+}
+
+/**
+ * Recompute a category streak from the games it has already counted plus any
+ * newly-confirmed finals, re-grading each against its CURRENT stored score.
+ *
+ * This replaces the old "append once, then freeze" logic. The freeze meant a
+ * game graded off a wrong score (e.g. a still-in-progress 2-1 the feed flagged
+ * as final, when the real final was 12-3) stayed wrong forever — wrongly
+ * extending the streak — even after the stored score corrected. Re-grading every
+ * refresh lets such a verdict self-heal: the streak follows the corrected score.
+ *
+ * Scope is deliberately "history ∪ new confirmed finals", NOT the entire store,
+ * so backfilled historical games (which never fed streaks) don't suddenly get
+ * pulled in.
+ *
+ * `prev.lastNotifiedCount` is preserved so each milestone still emails exactly
+ * once. When the streak shrinks or flips side (a correction, or the first run
+ * under this logic) lastNotifiedCount is pinned to the new count so a now-shorter
+ * streak is never re-emailed.
+ */
+export function updateCategoryStreak<W extends string>(
+  prev: CategoryStreak<W>,
+  confirmedFinals: Game[],
+  gamesById: Map<string, Game>,
+  winnerOf: (g: Game) => W | null,
+): CategoryStreak<W> {
+  const ids = new Set<string>();
+  for (const h of prev.history) ids.add(streakHistoryGameId(h.date));
+  for (const g of confirmedFinals) ids.add(g.id);
+
+  const graded: { g: Game; w: W }[] = [];
+  for (const id of ids) {
+    const g = gamesById.get(id);
+    if (!g) continue;
+    const w = winnerOf(g);
+    if (w === null) continue;
+    graded.push({ g, w });
+  }
+  graded.sort((a, b) => {
+    const t = new Date(a.g.startTime).getTime() - new Date(b.g.startTime).getTime();
+    if (t !== 0) return t;
+    return a.g.id < b.g.id ? -1 : a.g.id > b.g.id ? 1 : 0;
+  });
+
+  // Current streak = trailing run of identical winners, walking newest → older.
+  let current: W | null = null;
+  let count = 0;
+  for (let i = graded.length - 1; i >= 0; i--) {
+    const w = graded[i].w;
+    if (count === 0) {
+      current = w;
+      count = 1;
+    } else if (w === current) {
+      count += 1;
+    } else break;
+  }
+
+  const tail = count > 0 ? graded.slice(graded.length - count) : [];
+  const history = tail
+    .reverse()
+    .slice(0, 50)
+    .map(({ g, w }) => ({ date: `${etDateKeyOf(g.startTime)}:${g.id}`, winner: w }));
+
+  const lastNotifiedCount =
+    current !== null && current === prev.current
+      ? Math.min(prev.lastNotifiedCount, count)
+      : count;
+
+  return { current, count, lastNotifiedCount, history };
 }
 
 export interface StreakEmail {
