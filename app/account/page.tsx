@@ -4,7 +4,7 @@ import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
 import { Field } from "@/components/auth/Field";
 import { AuthBanner } from "@/components/auth/AuthBanner";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
-import { isValidEmail, passwordIssue } from "@/lib/validation";
+import { isValidEmail, passwordIssue, phoneIssue } from "@/lib/validation";
 
 function initials(name: string) {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -17,11 +17,14 @@ export default function AccountPage() {
   const [supabase] = useState(() => createSupabaseBrowserClient());
   const [ready, setReady] = useState(false);
   const [userId, setUserId] = useState("");
-  const [profile, setProfile] = useState({ name: "", email: "" });
+  const [profile, setProfile] = useState({ name: "", email: "", phone: "", address: "" });
 
-  // Name
+  // Profile (name + contact details)
   const [nameInput, setNameInput] = useState("");
-  const [nameMsg, setNameMsg] = useState<string>();
+  const [phoneInput, setPhoneInput] = useState("");
+  const [addressInput, setAddressInput] = useState("");
+  const [profileMsg, setProfileMsg] = useState<string>();
+  const [phoneErr, setPhoneErr] = useState<string>();
 
   // Email
   const [emailInput, setEmailInput] = useState("");
@@ -46,14 +49,18 @@ export default function AccountPage() {
       }
       const { data } = await supabase
         .from("profiles")
-        .select("name, email")
+        .select("name, email, phone, address")
         .eq("id", user.id)
         .single();
       const name = data?.name ?? "";
       const email = data?.email ?? user.email ?? "";
+      const phone = data?.phone ?? "";
+      const address = data?.address ?? "";
       setUserId(user.id);
-      setProfile({ name, email });
+      setProfile({ name, email, phone, address });
       setNameInput(name);
+      setPhoneInput(phone);
+      setAddressInput(address);
       setReady(true);
     })();
   }, [supabase]);
@@ -61,16 +68,28 @@ export default function AccountPage() {
   const setPwField = (k: keyof typeof pw) => (e: ChangeEvent<HTMLInputElement>) =>
     setPw((s) => ({ ...s, [k]: e.target.value }));
 
-  async function saveName(e: FormEvent) {
+  async function saveProfile(e: FormEvent) {
     e.preventDefault();
-    if (!nameInput.trim()) return;
-    const { error } = await supabase.from("profiles").update({ name: nameInput.trim() }).eq("id", userId);
-    if (error) {
-      setNameMsg(error.message);
+    const name = nameInput.trim();
+    if (!name) return;
+    const phone = phoneInput.trim();
+    const issue = phone ? phoneIssue(phone) : null;
+    if (issue) {
+      setPhoneErr(issue);
       return;
     }
-    setProfile((p) => ({ ...p, name: nameInput.trim() }));
-    setNameMsg("Name updated.");
+    setPhoneErr(undefined);
+    const address = addressInput.trim();
+    const { error } = await supabase
+      .from("profiles")
+      .update({ name, phone: phone || null, address: address || null })
+      .eq("id", userId);
+    if (error) {
+      setProfileMsg(error.message);
+      return;
+    }
+    setProfile((p) => ({ ...p, name, phone, address }));
+    setProfileMsg("Profile updated.");
   }
 
   async function changeEmail(e: FormEvent) {
@@ -143,23 +162,57 @@ export default function AccountPage() {
         </div>
       </div>
 
-      {/* Name */}
+      {/* Profile: name + contact details */}
       <section className="account-section">
         <div className="account-section-title">Profile</div>
-        <form className="account-form" onSubmit={saveName} noValidate>
+        <form className="account-form" onSubmit={saveProfile} noValidate>
           <Field
             label="Name"
             name="name"
             value={nameInput}
             onChange={(e: ChangeEvent<HTMLInputElement>) => {
               setNameInput(e.target.value);
-              setNameMsg(undefined);
+              setProfileMsg(undefined);
             }}
             autoComplete="name"
           />
-          {nameMsg ? <AuthBanner kind="success">{nameMsg}</AuthBanner> : null}
+          <Field
+            label="Phone number"
+            name="phone"
+            type="tel"
+            inputMode="tel"
+            value={phoneInput}
+            onChange={(e: ChangeEvent<HTMLInputElement>) => {
+              setPhoneInput(e.target.value);
+              setProfileMsg(undefined);
+              setPhoneErr(undefined);
+            }}
+            placeholder="(555) 123-4567"
+            autoComplete="tel"
+            error={phoneErr}
+          />
+          <Field
+            label="Address"
+            name="address"
+            value={addressInput}
+            onChange={(e: ChangeEvent<HTMLInputElement>) => {
+              setAddressInput(e.target.value);
+              setProfileMsg(undefined);
+            }}
+            placeholder="123 Main St, City, State ZIP"
+            autoComplete="street-address"
+          />
+          {profileMsg ? <AuthBanner kind="success">{profileMsg}</AuthBanner> : null}
           <div className="account-actions">
-            <button className="account-btn" type="submit" disabled={nameInput.trim() === profile.name}>
+            <button
+              className="account-btn"
+              type="submit"
+              disabled={
+                nameInput.trim() === profile.name &&
+                phoneInput.trim() === profile.phone &&
+                addressInput.trim() === profile.address
+              }
+            >
               Save
             </button>
           </div>

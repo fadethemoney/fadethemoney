@@ -8,13 +8,27 @@ import { AuthButton } from "@/components/auth/AuthButton";
 import { AuthBanner } from "@/components/auth/AuthBanner";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { bootstrapSuperAdmin, welcomeNewUser } from "@/app/auth/actions";
-import { isValidEmail, passwordIssue } from "@/lib/validation";
+import { isValidEmail, passwordIssue, phoneIssue } from "@/lib/validation";
 import { landingPathForRole } from "@/lib/landing";
 
-type Form = { name: string; email: string; password: string; confirm: string };
+type Form = {
+  name: string;
+  email: string;
+  phone: string;
+  address: string;
+  password: string;
+  confirm: string;
+};
 
 export default function RegisterPage() {
-  const [form, setForm] = useState<Form>({ name: "", email: "", password: "", confirm: "" });
+  const [form, setForm] = useState<Form>({
+    name: "",
+    email: "",
+    phone: "",
+    address: "",
+    password: "",
+    confirm: "",
+  });
   const [errors, setErrors] = useState<Partial<Record<keyof Form, string>>>({});
   const [formError, setFormError] = useState<string>();
   const [loading, setLoading] = useState(false);
@@ -30,6 +44,9 @@ export default function RegisterPage() {
     const next: Partial<Record<keyof Form, string>> = {};
     if (!form.name.trim()) next.name = "Enter your name.";
     if (!isValidEmail(form.email)) next.email = "Enter a valid email.";
+    const phone = phoneIssue(form.phone);
+    if (phone) next.phone = phone;
+    if (!form.address.trim()) next.address = "Enter your address.";
     const pw = passwordIssue(form.password);
     if (pw) next.password = pw;
     if (form.confirm !== form.password) next.confirm = "Passwords don't match.";
@@ -49,7 +66,11 @@ export default function RegisterPage() {
       email: form.email,
       password: form.password,
       options: {
-        data: { name: form.name.trim() },
+        data: {
+          name: form.name.trim(),
+          phone: form.phone.trim(),
+          address: form.address.trim(),
+        },
         emailRedirectTo: `${window.location.origin}/auth/callback`,
       },
     });
@@ -150,6 +171,26 @@ export default function RegisterPage() {
           placeholder="you@example.com"
           autoComplete="email"
           error={errors.email}
+        />
+        <Field
+          label="Phone number"
+          name="phone"
+          type="tel"
+          inputMode="tel"
+          value={form.phone}
+          onChange={update("phone")}
+          placeholder="(555) 123-4567"
+          autoComplete="tel"
+          error={errors.phone}
+        />
+        <Field
+          label="Address"
+          name="address"
+          value={form.address}
+          onChange={update("address")}
+          placeholder="123 Main St, City, State ZIP"
+          autoComplete="street-address"
+          error={errors.address}
         />
         <Field
           label="Password"

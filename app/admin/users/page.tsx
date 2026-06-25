@@ -9,6 +9,8 @@ type User = {
   id: string;
   name: string;
   email: string;
+  phone: string;
+  address: string;
   role: Role;
   email_opt_in: boolean;
   created_at: string;
@@ -22,17 +24,19 @@ const ROLE_LABEL: Record<Role, string> = {
   super_admin: "Super admin",
 };
 
-const SELECT = "id, name, email, role, email_opt_in, created_at";
+const SELECT = "id, name, email, phone, address, role, email_opt_in, created_at";
 
 function fromRow(r: {
   id: string;
   name: string | null;
   email: string;
+  phone: string | null;
+  address: string | null;
   role: Role;
   email_opt_in: boolean;
   created_at: string;
 }): User {
-  return { ...r, name: r.name ?? "" };
+  return { ...r, name: r.name ?? "", phone: r.phone ?? "", address: r.address ?? "" };
 }
 
 function joined(iso: string): string {
@@ -44,13 +48,15 @@ function joined(iso: string): string {
 }
 
 function downloadCsv(users: User[]) {
-  const header = ["Name", "Email", "Role", "Email opt-in", "Verified", "Joined"];
+  const header = ["Name", "Email", "Phone", "Address", "Role", "Email opt-in", "Verified", "Joined"];
   const esc = (v: string) => `"${v.replace(/"/g, '""')}"`;
   const verifiedLabel = (v?: boolean) => (v === undefined ? "" : v ? "Verified" : "Not verified");
   const rows = users.map((u) =>
     [
       u.name,
       u.email,
+      u.phone,
+      u.address,
       ROLE_LABEL[u.role],
       u.email_opt_in ? "Subscribed" : "Unsubscribed",
       verifiedLabel(u.verified),
@@ -124,7 +130,13 @@ export default function UsersPage() {
     if (optInFilter === "subscribed" && !u.email_opt_in) return false;
     if (optInFilter === "unsubscribed" && u.email_opt_in) return false;
     const q = query.trim().toLowerCase();
-    if (q && !u.name.toLowerCase().includes(q) && !u.email.toLowerCase().includes(q)) return false;
+    if (
+      q &&
+      !u.name.toLowerCase().includes(q) &&
+      !u.email.toLowerCase().includes(q) &&
+      !u.phone.toLowerCase().includes(q)
+    )
+      return false;
     return true;
   });
 
@@ -191,7 +203,7 @@ export default function UsersPage() {
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search name or email…"
+            placeholder="Search name, email or phone…"
             aria-label="Search users"
           />
           <select
@@ -273,7 +285,13 @@ export default function UsersPage() {
               <div className="ul-row" key={u.id}>
                 <div className="ul-cell ul-name">
                   <span className="ul-k">Name</span>
-                  {u.name || "—"}
+                  <span>{u.name || "—"}</span>
+                  {u.phone ? (
+                    <span style={{ display: "block", fontSize: 12, color: "#888780" }}>{u.phone}</span>
+                  ) : null}
+                  {u.address ? (
+                    <span style={{ display: "block", fontSize: 12, color: "#888780" }}>{u.address}</span>
+                  ) : null}
                 </div>
                 <div className="ul-cell">
                   <span className="ul-k">Email</span>
