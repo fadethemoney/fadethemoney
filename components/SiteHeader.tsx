@@ -11,9 +11,9 @@ export async function SiteHeader() {
     <header className="site">
       <div className="container">
         <nav className="nav-inner">
-          <Link href="/" className="logo">
-            <span className="logo-mark" aria-hidden />
-            <span className="logo-name">Fade The Money</span>
+          <Link href="/" className="logo" aria-label="Fade The Money">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.jpg" alt="Fade The Money" className="logo-img" />
           </Link>
           <div className="nav-links">
             <Link href="/">Dashboard</Link>

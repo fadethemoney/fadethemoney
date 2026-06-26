@@ -115,9 +115,8 @@ header.site {
   justify-content: space-between;
   padding: 20px 0;
 }
-.logo { display: flex; align-items: center; gap: 10px; text-decoration: none; }
-.logo-mark { width: 30px; height: 30px; background: var(--accent) url(/logo-mark.jpg) center / cover no-repeat; border-radius: 6px; flex-shrink: 0; }
-.logo-name { font-family: var(--font-serif); font-size: 19px; letter-spacing: -0.02em; color: var(--text); }
+.logo { display: flex; align-items: center; text-decoration: none; }
+.logo-img { height: 44px; width: auto; display: block; border-radius: 6px; }
 .nav-links { display: flex; gap: 28px; align-items: center; font-size: 13px; color: var(--text-secondary); }
 .nav-links a { color: var(--text-secondary); text-decoration: none; }
 .nav-links a:hover { color: var(--text); }
@@ -782,7 +781,7 @@ footer.site { padding: 32px 0; background: var(--bg-footer); }
 @media (max-width: 720px) {
   .container { padding: 0 18px; }
   .nav-inner { padding: 14px 0; gap: 12px; }
-  .logo-name { font-size: 17px; white-space: nowrap; }
+  .logo-img { height: 36px; }
   .nav-links { gap: 14px; font-size: 13px; }
 
   .hero { padding: 40px 0 32px; }
