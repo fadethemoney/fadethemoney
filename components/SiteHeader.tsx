@@ -13,7 +13,7 @@ export async function SiteHeader() {
         <nav className="nav-inner">
           <Link href="/" className="logo" aria-label="Fade The Money">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo.jpg" alt="Fade The Money" className="logo-img" />
+            <img src="/logo-mark.jpg" alt="Fade The Money" className="logo-img" />
           </Link>
           <div className="nav-links">
             <Link href="/">Dashboard</Link>
