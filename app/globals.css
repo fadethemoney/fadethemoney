@@ -113,10 +113,10 @@ header.site {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 20px 0;
+  padding: 0;
 }
 .logo { display: flex; align-items: center; text-decoration: none; }
-.logo-img { height: 44px; width: auto; display: block; border-radius: 6px; }
+.logo-img { height: 80px; width: auto; display: block; border-radius: 0; }
 .nav-links { display: flex; gap: 28px; align-items: center; font-size: 13px; color: var(--text-secondary); }
 .nav-links a { color: var(--text-secondary); text-decoration: none; }
 .nav-links a:hover { color: var(--text); }
@@ -780,8 +780,8 @@ footer.site { padding: 32px 0; background: var(--bg-footer); }
 /* ----- Mobile overrides ----- */
 @media (max-width: 720px) {
   .container { padding: 0 18px; }
-  .nav-inner { padding: 14px 0; gap: 12px; }
-  .logo-img { height: 36px; }
+  .nav-inner { padding: 0; gap: 12px; }
+  .logo-img { height: 64px; }
   .nav-links { gap: 14px; font-size: 13px; }
 
   .hero { padding: 40px 0 32px; }
