@@ -116,7 +116,7 @@ header.site {
   padding: 20px 0;
 }
 .logo { display: flex; align-items: center; gap: 10px; text-decoration: none; }
-.logo-mark { width: 22px; height: 22px; background: var(--accent); border-radius: 4px; }
+.logo-mark { width: 30px; height: 30px; background: var(--accent) url(/logo-mark.jpg) center / cover no-repeat; border-radius: 6px; flex-shrink: 0; }
 .logo-name { font-family: var(--font-serif); font-size: 19px; letter-spacing: -0.02em; color: var(--text); }
 .nav-links { display: flex; gap: 28px; align-items: center; font-size: 13px; color: var(--text-secondary); }
 .nav-links a { color: var(--text-secondary); text-decoration: none; }
@@ -837,6 +837,23 @@ footer.site { padding: 32px 0; background: var(--bg-footer); }
 }
 @media (min-width: 480px) {
   .auth-card { padding: 36px 32px; }
+}
+
+.auth-brand {
+  margin: -26px -20px 22px;
+  border-radius: var(--auth-radius) var(--auth-radius) 0 0;
+  overflow: hidden;
+}
+.auth-brand img {
+  display: block;
+  width: 100%;
+  height: 132px;
+  object-fit: cover;
+  object-position: center 56%;
+}
+@media (min-width: 480px) {
+  .auth-brand { margin: -36px -32px 24px; }
+  .auth-brand img { height: 150px; }
 }
 
 .auth-head { margin-bottom: 22px; }

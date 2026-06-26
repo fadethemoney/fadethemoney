@@ -17,6 +17,10 @@ export function AuthLayout({ title, subtitle, children, footer }: AuthLayoutProp
   return (
     <main className="auth-shell">
       <div className="auth-card">
+        <div className="auth-brand">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.jpg" alt="Fade The Money" />
+        </div>
         <div className="auth-head">
           <h1 className="auth-title">{title}</h1>
           {subtitle ? <p className="auth-sub">{subtitle}</p> : null}
