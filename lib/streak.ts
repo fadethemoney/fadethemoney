@@ -14,11 +14,34 @@ import { etDateKeyOf, etKickoffLabel } from "./time";
 export const LEAGUES_ALL: League[] = ["nba", "wnba", "mlb", "nfl", "nhl"];
 
 /**
- * Lowest streak count that triggers an email. The client only wants alerts once
- * a streak is *after 3* (i.e. 4+), so 2- and 3-streaks stay silent and they get
- * far fewer emails for the same league/games.
+ * Lowest "hot streak" count that triggers an email at every step: 4, 5, 6, …
  */
 export const MIN_NOTIFY_COUNT = 4;
+
+/**
+ * The client also wants a single early "heads up" the moment a streak reaches 2
+ * — but explicitly NOT at 3 ("just 2, not 3"). So the full set of counts that
+ * email is {2} ∪ {4, 5, 6, …}; 1 and 3 stay silent.
+ */
+export const EARLY_NOTIFY_COUNT = 2;
+
+function shouldNotifyAt(n: number): boolean {
+  return n === EARLY_NOTIFY_COUNT || n >= MIN_NOTIFY_COUNT;
+}
+
+/**
+ * Milestone counts to email this run: every not-yet-notified count between
+ * lastNotifiedCount+1 and count that qualifies (2, or 4+). Walking each step
+ * (rather than just the top) means a multi-game jump still emits each milestone
+ * exactly once, and the 3-step is skipped silently.
+ */
+function notifyMilestones<W extends string>(streak: CategoryStreak<W>): number[] {
+  const out: number[] = [];
+  for (let n = streak.lastNotifiedCount + 1; n <= streak.count; n++) {
+    if (shouldNotifyAt(n)) out.push(n);
+  }
+  return out;
+}
 
 function emptyCategory<W extends string>(): CategoryStreak<W> {
   return { current: null, count: 0, lastNotifiedCount: 0, history: [] };
@@ -335,9 +358,10 @@ function withNextGame(lines: string[], category: BetCategory, nextGame: Game | n
 }
 
 /**
- * Emit one email per milestone (4, 5, 6, …) between lastNotifiedCount+1 and
- * streak.count. If multiple games finalize between cron ticks and the streak
- * jumps several steps at once, every milestone still gets its own alert.
+ * Emit one email per milestone (2, then 4, 5, 6, …) between lastNotifiedCount+1
+ * and streak.count. If multiple games finalize between cron ticks and the streak
+ * jumps several steps at once, every qualifying milestone still gets its own
+ * alert; the 1- and 3-streaks stay silent.
  */
 export function buildAtsEmails(
   league: League,
@@ -346,8 +370,7 @@ export function buildAtsEmails(
   nextGame?: Game | null,
 ): StreakEmail[] {
   const out: StreakEmail[] = [];
-  const start = Math.max(MIN_NOTIFY_COUNT, streak.lastNotifiedCount + 1);
-  for (let n = start; n <= streak.count; n++) {
+  for (const n of notifyMilestones(streak)) {
     const side = streak.current?.toUpperCase();
     const header = `${league.toUpperCase()} SPREAD — ${side} has won ${n} bets in a row (ATS).`;
     out.push({
@@ -368,8 +391,7 @@ export function buildTotalEmails(
   nextGame?: Game | null,
 ): StreakEmail[] {
   const out: StreakEmail[] = [];
-  const start = Math.max(MIN_NOTIFY_COUNT, streak.lastNotifiedCount + 1);
-  for (let n = start; n <= streak.count; n++) {
+  for (const n of notifyMilestones(streak)) {
     const side = streak.current?.toUpperCase();
     const header = `${league.toUpperCase()} TOTAL — ${side} has won ${n} totals in a row.`;
     out.push({
@@ -390,8 +412,7 @@ export function buildMoneylineEmails(
   nextGame?: Game | null,
 ): StreakEmail[] {
   const out: StreakEmail[] = [];
-  const start = Math.max(MIN_NOTIFY_COUNT, streak.lastNotifiedCount + 1);
-  for (let n = start; n <= streak.count; n++) {
+  for (const n of notifyMilestones(streak)) {
     const side = streak.current?.toUpperCase();
     const header = `${league.toUpperCase()} MONEYLINE — ${side} has won ${n} bets in a row (straight up).`;
     out.push({
