@@ -14,26 +14,27 @@ import { etDateKeyOf, etKickoffLabel } from "./time";
 export const LEAGUES_ALL: League[] = ["nba", "wnba", "mlb", "nfl", "nhl"];
 
 /**
- * Lowest "hot streak" count that triggers an email at every step: 4, 5, 6, …
+ * Exact streak counts that trigger an email: one early heads-up at 2, then one
+ * confirmation at 4 — and nothing else. 1, 3, 5, 6, 7… all stay silent. The
+ * client chose this "just 2 and 4, no spam after" cadence on 2026-06-27.
+ */
+export const NOTIFY_COUNTS: readonly number[] = [2, 4];
+
+/**
+ * Highest count in NOTIFY_COUNTS. Kept only for the legacy cross-league email in
+ * scripts/update.ts, which gates on a single >= threshold.
  */
 export const MIN_NOTIFY_COUNT = 4;
 
-/**
- * The client also wants a single early "heads up" the moment a streak reaches 2
- * — but explicitly NOT at 3 ("just 2, not 3"). So the full set of counts that
- * email is {2} ∪ {4, 5, 6, …}; 1 and 3 stay silent.
- */
-export const EARLY_NOTIFY_COUNT = 2;
-
 function shouldNotifyAt(n: number): boolean {
-  return n === EARLY_NOTIFY_COUNT || n >= MIN_NOTIFY_COUNT;
+  return NOTIFY_COUNTS.includes(n);
 }
 
 /**
  * Milestone counts to email this run: every not-yet-notified count between
- * lastNotifiedCount+1 and count that qualifies (2, or 4+). Walking each step
- * (rather than just the top) means a multi-game jump still emits each milestone
- * exactly once, and the 3-step is skipped silently.
+ * lastNotifiedCount+1 and streak.count that is in NOTIFY_COUNTS (2 or 4). Walking
+ * each step (rather than just the top) means a multi-game jump still emits each
+ * qualifying milestone exactly once; 3 and 5+ are skipped silently.
  */
 function notifyMilestones<W extends string>(streak: CategoryStreak<W>): number[] {
   const out: number[] = [];
@@ -358,10 +359,10 @@ function withNextGame(lines: string[], category: BetCategory, nextGame: Game | n
 }
 
 /**
- * Emit one email per milestone (2, then 4, 5, 6, …) between lastNotifiedCount+1
- * and streak.count. If multiple games finalize between cron ticks and the streak
- * jumps several steps at once, every qualifying milestone still gets its own
- * alert; the 1- and 3-streaks stay silent.
+ * Emit one email per qualifying milestone (2 and 4 only) between
+ * lastNotifiedCount+1 and streak.count. If multiple games finalize between cron
+ * ticks and the streak jumps several steps at once, each qualifying milestone
+ * still gets its own alert; 1, 3, and 5+ stay silent.
  */
 export function buildAtsEmails(
   league: League,
