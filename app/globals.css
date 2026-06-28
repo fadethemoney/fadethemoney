@@ -67,8 +67,8 @@ em { font-style: italic; color: var(--accent); font-weight: 400; }
   font-size: 10px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  background: var(--accent-surface);
-  color: var(--accent);
+  background: rgba(255, 255, 255, 0.22);
+  color: #fff;
   padding: 3px 8px;
   border-radius: 4px;
 }
@@ -81,7 +81,7 @@ em { font-style: italic; color: var(--accent); font-weight: 400; }
   text-overflow: ellipsis;
   color: #fff;
 }
-.announce-pick { font-family: var(--font-mono); font-weight: 500; color: var(--accent); }
+.announce-pick { font-family: var(--font-mono); font-weight: 600; color: #fff; }
 .announce-sep { margin: 0 8px; opacity: 0.5; }
 .announce-dots { display: flex; gap: 5px; flex-shrink: 0; }
 .announce-dots span {
@@ -89,18 +89,18 @@ em { font-style: italic; color: var(--accent); font-weight: 400; }
   background: rgba(255, 255, 255, 0.35);
   transition: background 0.2s ease;
 }
-.announce-dots span.on { background: var(--accent); }
+.announce-dots span.on { background: #fff; }
 .announce-dismiss {
   flex-shrink: 0;
   background: none;
   border: 0;
-  color: var(--text-muted);
+  color: rgba(255, 255, 255, 0.8);
   font-size: 20px;
   line-height: 1;
   cursor: pointer;
   padding: 0 2px;
 }
-.announce-dismiss:hover { color: var(--text); }
+.announce-dismiss:hover { color: #fff; }
 @media (max-width: 640px) {
   .announce-sep, .announce-dots { display: none; }
   .announce-text { font-size: 14px;  }
