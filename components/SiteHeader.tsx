@@ -15,7 +15,7 @@ export async function SiteHeader() {
         <nav className="nav-inner">
           <Link href="/" className="logo" aria-label="Fade The Money">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo-header.jpg" alt="Fade The Money" className="logo-img" />
+            <img src="/logo-header-new.jpg" alt="Fade The Money" className="logo-img" />
           </Link>
 
           {/* Desktop nav links (collapsed into the drawer on mobile). */}
