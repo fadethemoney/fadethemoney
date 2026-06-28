@@ -103,8 +103,8 @@ em { font-style: italic; color: var(--accent); font-weight: 400; }
 .announce-dismiss:hover { color: var(--text); }
 @media (max-width: 640px) {
   .announce-sep, .announce-dots { display: none; }
-  .announce-text { font-size: 16px; }
-  .announce-inner { padding: 10px 0; }
+  .announce-text { font-size: 14px;     }
+  .announce-inner { padding: 5px !important; background:#D2A549;   } 
 }
 
 /* Header */
