@@ -106,8 +106,8 @@ em { font-style: italic; color: var(--accent); font-weight: 400; }
 
 /* Header */
 header.site {
-  border-bottom: 1px solid var(--border);
-  background: var(--bg);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: #000000;
 }
 .nav-inner {
   display: flex;
@@ -117,9 +117,9 @@ header.site {
 }
 .logo { display: flex; align-items: center; text-decoration: none; }
 .logo-img { height: 80px; width: auto; display: block; border-radius: 0; }
-.nav-links { display: flex; gap: 28px; align-items: center; font-size: 13px; color: var(--text-secondary); }
-.nav-links a { color: var(--text-secondary); text-decoration: none; }
-.nav-links a:hover { color: var(--text); }
+.nav-links { display: flex; gap: 28px; align-items: center; font-size: 13px; color: rgba(255, 255, 255, 0.72); }
+.nav-links a { color: rgba(255, 255, 255, 0.72); text-decoration: none; }
+.nav-links a:hover { color: #FFFFFF; }
 .nav-cta {
   background: var(--accent);
   color: #FFFFFF !important;
@@ -143,11 +143,11 @@ header.site {
   cursor: pointer;
   font-family: inherit;
   font-size: 13px;
-  color: var(--text);
+  color: rgba(255, 255, 255, 0.85);
   padding: 4px;
   border-radius: 8px;
 }
-.usermenu-trigger:hover { background: var(--bg-section); }
+.usermenu-trigger:hover { background: rgba(255, 255, 255, 0.08); }
 .usermenu-avatar {
   width: 28px;
   height: 28px;
@@ -167,7 +167,7 @@ header.site {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.usermenu-caret { font-size: 10px; color: var(--text-muted); }
+.usermenu-caret { font-size: 10px; color: rgba(255, 255, 255, 0.55); }
 .usermenu-pop {
   position: absolute;
   right: 0;
