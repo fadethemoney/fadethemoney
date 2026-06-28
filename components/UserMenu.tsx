@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { IconGrid, IconUser, IconBell, IconNews, IconUsers, IconLogout } from "@/components/icons";
 
 function initials(s: string) {
   const parts = s.trim().split(/\s+/).filter(Boolean);
@@ -69,13 +70,32 @@ export function UserMenu({ name, email, dashboardHref, isAdmin }: Props) {
             <div className="usermenu-head-name">{name}</div>
             <div className="usermenu-head-email">{email}</div>
           </div>
-          <Link role="menuitem" className="usermenu-item" href={dashboardHref} onClick={() => setOpen(false)}>
+          <Link role="menuitem" className="usermenu-item" href={isAdmin ? dashboardHref : "/"} onClick={() => setOpen(false)}>
+            <IconGrid />
             {isAdmin ? "Admin dashboard" : "Dashboard"}
           </Link>
+          {isAdmin ? (
+            <>
+              <Link role="menuitem" className="usermenu-item" href="/admin/notifications" onClick={() => setOpen(false)}>
+                <IconBell />
+                Notifications
+              </Link>
+              <Link role="menuitem" className="usermenu-item" href="/admin/news" onClick={() => setOpen(false)}>
+                <IconNews />
+                News
+              </Link>
+              <Link role="menuitem" className="usermenu-item" href="/admin/users" onClick={() => setOpen(false)}>
+                <IconUsers />
+                Users
+              </Link>
+            </>
+          ) : null}
           <Link role="menuitem" className="usermenu-item" href="/account" onClick={() => setOpen(false)}>
+            <IconUser />
             Account &amp; profile
           </Link>
           <button type="button" role="menuitem" className="usermenu-item danger" onClick={logout}>
+            <IconLogout />
             Log out
           </button>
         </div>

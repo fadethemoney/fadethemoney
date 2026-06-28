@@ -3,6 +3,7 @@ import "./globals.css";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { AnnouncementBar } from "@/components/AnnouncementBar";
+import { BottomNav } from "@/components/BottomNav";
 import { getActiveNotifications } from "@/lib/notifications";
 import { getSessionUser } from "@/lib/auth";
 
@@ -37,6 +38,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <SiteHeader />
         {children}
         <SiteFooter />
+        <BottomNav loggedIn={!!user} />
       </body>
     </html>
   );

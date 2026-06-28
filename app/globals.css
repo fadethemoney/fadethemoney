@@ -115,12 +115,15 @@ header.site {
 .nav-inner {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 24px;
   padding: 0;
 }
 .logo { display: flex; align-items: center; text-decoration: none; }
 .logo-img { height: 80px; width: auto; display: block; border-radius: 0; }
-.nav-links { display: flex; gap: 28px; align-items: center; font-size: 13px; color: rgba(255, 255, 255, 0.72); }
+.nav-links { display: flex; gap: 28px; align-items: center; font-size: 13px; color: rgba(255, 255, 255, 0.72); margin-left: auto; }
+.nav-account { display: flex; align-items: center; }
+/* Mobile-only nav row under the logo; hidden on desktop (desktop uses .nav-links). */
+.topnav-mobile { display: none; }
 .nav-links a { color: rgba(255, 255, 255, 0.72); text-decoration: none; }
 .nav-links a:hover { color: #FFFFFF; }
 .nav-cta {
@@ -197,10 +200,12 @@ header.site {
   white-space: nowrap;
 }
 .usermenu-item {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 11px;
   width: 100%;
   text-align: left;
-  padding: 9px 10px;
+  padding: 10px 10px;
   border-radius: 6px;
   background: none;
   border: 0;
@@ -210,8 +215,12 @@ header.site {
   color: var(--text);
   text-decoration: none;
 }
-.usermenu-item:hover { background: var(--bg-section); }
+.usermenu-item svg { width: 17px; height: 17px; color: var(--text-muted); flex-shrink: 0; }
+.usermenu-item:hover { background: var(--bg-section); color: var(--accent); }
+.usermenu-item:hover svg { color: var(--accent); }
 .usermenu-item.danger { color: var(--gambler-red); }
+.usermenu-item.danger svg { color: var(--gambler-red); }
+.usermenu-item.danger:hover { background: var(--vegas-bg); color: var(--gambler-red); }
 @media (max-width: 640px) {
   .usermenu-name { display: none; }
 }
@@ -799,9 +808,47 @@ footer.site { padding: 32px 0; background: var(--bg-footer); }
 /* ----- Mobile overrides ----- */
 @media (max-width: 720px) {
   .container { padding: 0 18px; }
-  .nav-inner { padding: 0; gap: 12px; }
+  /* Header: empty left · logo (center) · account (right) */
+  .nav-inner {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: 8px;
+    padding: 0;
+  }
+  .logo { grid-column: 2; justify-self: center; }
+  .nav-account { grid-column: 3; justify-self: end; }
+  .nav-links { display: none; }
   .logo-img { height: 64px; }
-  .nav-links { gap: 14px; font-size: 13px; }
+
+  /* Nav row directly under the logo (scrolls horizontally) */
+  .topnav-mobile {
+    display: block;
+    background: #000000;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+  .topnav-scroll {
+    display: flex;
+    gap: 4px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .topnav-scroll::-webkit-scrollbar { display: none; }
+  .topnav-link {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    flex-shrink: 0;
+    padding: 12px 6px;
+    color: var(--text-secondary);
+    text-decoration: none;
+    font-size: 14px;
+    white-space: nowrap;
+    border-bottom: 2px solid transparent;
+  }
+  .topnav-link svg { width: 18px; height: 18px; color: currentColor; }
+  .topnav-link.active { color: var(--accent); border-bottom-color: var(--accent); }
 
   .hero { padding: 40px 0 32px; }
   .hero h1 { font-size: 36px; line-height: 1.08; }
@@ -1847,5 +1894,47 @@ textarea.field-input { min-height: 92px; resize: vertical; line-height: 1.5; }
   pointer-events: none;
   float: left;
   height: 0;
+}
+
+/* ============================================================
+   Mobile bottom tab bar (app-like) — mobile only, hidden on desktop.
+   ============================================================ */
+
+/* ---- Bottom tab bar ---- */
+.bottom-nav { display: none; }
+.bottom-tab { text-decoration: none; }
+
+@media (max-width: 720px) {
+  .bottom-nav {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 40;
+    background: rgba(10, 10, 11, 0.94);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+    border-top: 1px solid var(--border);
+    padding: 7px 4px calc(7px + env(safe-area-inset-bottom));
+  }
+  .bottom-tab {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    padding: 2px 0;
+    color: var(--text-muted);
+    font-size: 10px;
+    letter-spacing: 0.02em;
+    min-height: 44px;
+  }
+  .bottom-tab svg { width: 22px; height: 22px; }
+  .bottom-tab.active { color: var(--accent); }
+
+  /* Keep page content + footer clear of the fixed bar. */
+  body { padding-bottom: calc(60px + env(safe-area-inset-bottom)); }
 }
 
