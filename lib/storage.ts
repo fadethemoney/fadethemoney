@@ -136,14 +136,16 @@ export async function upsertGames(incoming: Game[]): Promise<DataStore> {
     const started = Number.isFinite(startMs) && startMs <= now;
     let lockedTrend = existing?.trend ?? g.trend;
     if (started && !existing?.trend) lockedTrend = undefined;
-    // Confirm a final only once we've carried it as final across two refreshes.
-    // The odds feed can briefly report a game final while its box score still
-    // shows an in-progress number; waiting one cycle lets the score settle before
-    // streaks grade it. The score itself still updates every tick (incoming `g`
-    // wins the spread below), so a late correction is picked up and re-graded —
-    // see updateCategoryStreak in lib/streak.ts.
+    // Confirm a final only once the feed reports it FINALIZED (results official)
+    // AND we've carried it as final across two refreshes. "completed" alone is
+    // not enough — the feed can flag a game complete while its box score still
+    // shows an in-progress number (the NYY@BOS 4-2 / real 3-6 bug), and that
+    // stale score then freezes into a streak. Requiring finalized means we only
+    // grade against the settled, official score. The score still updates every
+    // tick (incoming `g` wins below), so a late correction is re-graded — see
+    // updateCategoryStreak in lib/streak.ts.
     const confirmedFinal =
-      g.status === "final"
+      g.status === "final" && g.finalized === true
         ? existing?.confirmedFinal === true || existing?.status === "final"
         : false;
     map.set(g.id, { ...existing, ...g, trend: lockedTrend, confirmedFinal });

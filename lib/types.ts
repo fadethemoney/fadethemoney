@@ -58,6 +58,13 @@ export interface Game {
    * upsertGames (lib/storage.ts).
    */
   confirmedFinal?: boolean;
+  /**
+   * True when the odds feed reports the game's results as FINALIZED (official),
+   * not merely "completed". A game can be flagged completed while its box score
+   * is still settling, so we only lock/grade a score once it's finalized. Set
+   * from status.finalized in lib/sportsgameodds.ts.
+   */
+  finalized?: boolean;
   finalResult?: {
     winnerSide: Side;
     margin: number;

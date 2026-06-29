@@ -253,8 +253,12 @@ function toGame(ev: ApiEvent, league: League): Game | null {
   const away = teamFrom(ev.teams?.away, "AWAY");
   const status = pickStatus(ev.status);
   if (status !== "scheduled") {
-    const homePts = ev.teams?.home?.score ?? ev.results?.game?.home?.points;
-    const awayPts = ev.teams?.away?.score ?? ev.results?.game?.away?.points;
+    // Prefer the official settled result (results.game.*.points) over the live
+    // ticker (teams.*.score). The ticker can freeze on a mid-game number when the
+    // feed flags a game complete before the box score settles; results carries
+    // the authoritative final. They agree once the game is finalized.
+    const homePts = ev.results?.game?.home?.points ?? ev.teams?.home?.score;
+    const awayPts = ev.results?.game?.away?.points ?? ev.teams?.away?.score;
     if (typeof homePts === "number") home.score = homePts;
     if (typeof awayPts === "number") away.score = awayPts;
   } else {
@@ -274,6 +278,7 @@ function toGame(ev: ApiEvent, league: League): Game | null {
     home,
     away,
     trend: trendFromOdds(ev),
+    finalized: ev.status?.finalized === true,
     updatedAt: new Date().toISOString(),
   };
 }
@@ -369,8 +374,9 @@ function toHistoricalGame(ev: ApiEvent, league: League): Game | null {
 
   const home = teamFrom(ev.teams?.home, "HOME");
   const away = teamFrom(ev.teams?.away, "AWAY");
-  const homePts = ev.teams?.home?.score ?? ev.results?.game?.home?.points;
-  const awayPts = ev.teams?.away?.score ?? ev.results?.game?.away?.points;
+  // Prefer the official settled result over the live ticker — see toGame.
+  const homePts = ev.results?.game?.home?.points ?? ev.teams?.home?.score;
+  const awayPts = ev.results?.game?.away?.points ?? ev.teams?.away?.score;
   if (typeof homePts !== "number" || typeof awayPts !== "number") return null;
   home.score = homePts;
   away.score = awayPts;
@@ -387,6 +393,7 @@ function toHistoricalGame(ev: ApiEvent, league: League): Game | null {
     home,
     away,
     trend,
+    finalized: ev.status?.finalized === true,
     updatedAt: new Date().toISOString(),
   };
 }
