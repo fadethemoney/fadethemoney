@@ -1,13 +1,25 @@
 import { NextResponse } from "next/server";
+import { randomUUID } from "crypto";
 import { fetchAllGames, SportsGameOddsError, type LeagueFetchError } from "@/lib/sportsgameodds";
 import { attachFinalResult, finalizeGames } from "@/lib/merge";
-import { upsertGames, recordDaily, setStreak, setLeagueStreaks, readStore, writeStore } from "@/lib/storage";
+import {
+  upsertGames,
+  recordDaily,
+  setStreak,
+  setLeagueStreaks,
+  setFetchAlert,
+  acquireLease,
+  releaseLease,
+  readStore,
+  writeStore,
+} from "@/lib/storage";
 import { summarizeDay, todayKey } from "@/lib/calc";
 import { etDateKeyOf } from "@/lib/time";
 import { notifyAdmin } from "@/lib/mailer";
 import {
   atsWinnerOf,
   buildAtsEmails,
+  buildCorrectionEmail,
   buildMoneylineEmails,
   buildTotalEmails,
   findNextGame,
@@ -23,8 +35,25 @@ export const dynamic = "force-dynamic";
 const LEAGUES: League[] = ["nba", "wnba", "mlb", "nfl", "nhl"];
 
 async function runRefresh(opts: { hoursBack?: number; hoursForward?: number } = {}) {
+  // Serialize overlapping cron invocations: Vercel cron is best-effort and can
+  // double-fire the same tick. A second run that can't take the lease skips
+  // rather than racing the first (which would clobber Blob writes / double-send a
+  // milestone email). The lease self-expires and acquisition is fail-open.
+  const holder = randomUUID();
+  if (!(await acquireLease(holder))) {
+    return { ok: true, skipped: true, reason: "locked" as const };
+  }
+  try {
+    return await doRefresh(opts);
+  } finally {
+    await releaseLease(holder);
+  }
+}
+
+async function doRefresh(opts: { hoursBack?: number; hoursForward?: number } = {}) {
   const fetchErrors: LeagueFetchError[] = [];
   const fetched = await fetchAllGames(LEAGUES, fetchErrors, opts);
+  await alertOnFetchErrors(fetchErrors);
   const all = finalizeGames(fetched);
   await upsertGames(all);
 
@@ -95,11 +124,34 @@ async function runRefresh(opts: { hoursBack?: number; hoursForward?: number } = 
       moneyline: updateCategoryStreak(prev.moneyline, lf, gameById, moneylineWinnerOf),
     };
     const nextGame = findNextGame(store.games, league);
+
+    // A re-grade (e.g. an official post-final score correction now reachable via
+    // the wider fetch window) can shrink or flip a streak whose milestone we
+    // ALREADY emailed. A sent email can't be unsent, so send one corrective
+    // notice. Best-effort: a failed send is warned, not retried — the on-site
+    // streak has already self-healed via updateCategoryStreak.
+    for (const corr of [
+      buildCorrectionEmail(league, "ats", prev.ats, gameById, atsWinnerOf),
+      buildCorrectionEmail(league, "total", prev.total, gameById, totalWinnerOf),
+    ]) {
+      if (!corr) continue;
+      try {
+        await notifyAdmin({ subject: corr.subject, text: corr.text });
+      } catch (e) {
+        console.warn(`[refresh] notifyAdmin (${corr.category} correction) failed:`, (e as Error).message);
+      }
+    }
+
+    // Milestone emails (counts 2 and 4). Advance lastNotifiedCount ONLY after a
+    // confirmed send; on failure, break so this milestone stays in the notify
+    // window and retries next tick (instead of being silently skipped) and a
+    // later milestone can't leapfrog an un-sent earlier one.
     for (const email of buildAtsEmails(league, ls.ats, gameById, nextGame)) {
       try {
         await notifyAdmin({ subject: email.subject, text: email.text });
       } catch (e) {
         console.warn("[refresh] notifyAdmin (ats) failed:", (e as Error).message);
+        break;
       }
       ls.ats = { ...ls.ats, lastNotifiedCount: email.newLastNotifiedCount };
     }
@@ -108,6 +160,7 @@ async function runRefresh(opts: { hoursBack?: number; hoursForward?: number } = 
         await notifyAdmin({ subject: email.subject, text: email.text });
       } catch (e) {
         console.warn("[refresh] notifyAdmin (total) failed:", (e as Error).message);
+        break;
       }
       ls.total = { ...ls.total, lastNotifiedCount: email.newLastNotifiedCount };
     }
@@ -125,6 +178,56 @@ async function runRefresh(opts: { hoursBack?: number; hoursForward?: number } = 
   return { ok: true, count: all.length, streak: globalStreak, streaks: perLeague, fetchErrors };
 }
 
+const ALERT_REALERT_MS = Number(process.env.FETCH_ALERT_REALERT_MS) || 6 * 3600_000;
+
+/**
+ * SportsGameOdds per-league fetches are isolated (Promise.allSettled), so a
+ * provider outage returns ok:true with zero games and never throws — grading
+ * silently freezes with no signal. Page an admin, but only on a STATE CHANGE
+ * (a new/different failing set) or after a cooldown, never every 2-min tick.
+ * Dedup state is persisted (DataStore.fetchAlert) so concurrent/queued runs
+ * can't spam, and we advance/clear it only after a confirmed send.
+ */
+async function alertOnFetchErrors(errors: LeagueFetchError[]) {
+  const store = await readStore();
+  const prev = store.fetchAlert ?? null;
+  const failing = Array.from(new Set(errors.map((e) => e.league))).sort();
+  const sig = failing.join(",");
+
+  if (failing.length === 0) {
+    if (prev) {
+      try {
+        await notifyAdmin({
+          subject: "[Fade The Money] SportsGameOdds fetch RECOVERED",
+          text: `League fetches are succeeding again (was failing: ${prev.leagues.join(", ") || "?"}).`,
+        });
+        await setFetchAlert(null); // clear only after a confirmed send
+      } catch (e) {
+        console.warn("[refresh] notifyAdmin (fetch-recover) failed:", (e as Error).message);
+      }
+    }
+    return;
+  }
+
+  const prevSig = (prev?.leagues ?? []).join(",");
+  const ageMs = prev ? Date.now() - new Date(prev.alertedAt).getTime() : Infinity;
+  const shouldSend = sig !== prevSig || !Number.isFinite(ageMs) || ageMs >= ALERT_REALERT_MS;
+  if (!shouldSend) return;
+
+  const lines = errors.map((e) => `• ${e.league}: ${e.message}`).join("\n");
+  try {
+    await notifyAdmin({
+      subject: `[Fade The Money] SportsGameOdds fetch FAILING (${failing.join(", ")})`,
+      text:
+        `Grading is starved of data — ${failing.length} league fetch(es) failed this refresh.\n\n${lines}\n\n` +
+        `Streak emails cannot fire while this persists. Check SportsGameOdds status / API quota.`,
+    });
+    await setFetchAlert({ leagues: failing, alertedAt: new Date().toISOString() }); // advance only after send
+  } catch (e) {
+    console.warn("[refresh] notifyAdmin (fetch-fail) failed:", (e as Error).message);
+  }
+}
+
 function authorize(req: Request): NextResponse | null {
   const token = process.env.REFRESH_TOKEN;
   if (!token) return null;
@@ -140,9 +243,13 @@ async function maybeRefresh(req: Request) {
   const url = new URL(req.url);
   const force = url.searchParams.get("force") === "1" || !!req.headers.get("x-vercel-cron");
   const days = Number(url.searchParams.get("days"));
+  // Routine cron uses a 96h back-window (not fetchLeagueGames' bare default) so
+  // already-FINAL games stay re-fetchable long enough for official post-final
+  // scoring corrections to land and self-heal the streak. An explicit ?days=
+  // override still wins.
   const opts = Number.isFinite(days) && days > 0
     ? { hoursBack: days * 24, hoursForward: 48 }
-    : {};
+    : { hoursBack: 96, hoursForward: 48 };
   if (!force) {
     const store = await readStore();
     const ageMs = Date.now() - new Date(store.lastUpdated).getTime();

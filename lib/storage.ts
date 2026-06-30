@@ -1,7 +1,15 @@
 import { promises as fs } from "fs";
 import path from "path";
 import { put, list } from "@vercel/blob";
-import type { DataStore, Game, DailyRecord, StreakState, League, LeagueStreaks } from "./types";
+import type {
+  DataStore,
+  Game,
+  DailyRecord,
+  StreakState,
+  League,
+  LeagueStreaks,
+  FetchAlertState,
+} from "./types";
 
 /**
  * Storage layer.
@@ -30,6 +38,8 @@ const EMPTY: DataStore = {
   history: [],
   streak: { current: null, count: 0, lastNotifiedCount: 0, history: [] },
   streaks: {},
+  lock: null,
+  fetchAlert: null,
   lastUpdated: new Date(0).toISOString(),
 };
 
@@ -187,6 +197,62 @@ export async function setLeagueStreaks(
   const store = await readStoreFresh();
   store.streaks = streaks;
   await writeStore(store);
+}
+
+export async function setFetchAlert(state: FetchAlertState | null): Promise<void> {
+  const store = await readStoreFresh();
+  store.fetchAlert = state;
+  await writeStore(store);
+}
+
+/**
+ * Best-effort advisory lease over the single store blob so two overlapping cron
+ * invocations (Vercel cron is best-effort and can double-fire) don't run the
+ * refresh pipeline concurrently and clobber each other's writes or double-send a
+ * milestone email.
+ *
+ * Deliberately simple and FAIL-OPEN: this is a read → check → write, not a true
+ * compare-and-swap (Vercel Blob is last-writer-wins and eventually consistent).
+ * It catches the common staggered overlap (run B starts after run A's lock has
+ * propagated); a truly simultaneous race may still let both through — that residual
+ * is backstopped by advancing lastNotifiedCount only on a confirmed send. If
+ * acquisition itself errors we return true (proceed) rather than freeze refreshes
+ * over a lock-infra hiccup. The lease self-expires so a crashed run can't block
+ * the cron forever.
+ */
+const LEASE_MS = 90_000; // > a normal run, < the 2-min cron period; stale lease self-expires
+
+export async function acquireLease(holder: string): Promise<boolean> {
+  try {
+    bustCache(); // lock decisions must ignore the per-instance read cache
+    const store = useBlob() ? await readFromBlob() : await readFromFile();
+    const now = Date.now();
+    const held = store.lock && new Date(store.lock.expiresAt).getTime() > now;
+    if (held && store.lock!.holder !== holder) return false; // someone else holds a live lease
+    store.lock = { holder, expiresAt: new Date(now + LEASE_MS).toISOString() };
+    await writeStore(store);
+    return true;
+  } catch (e) {
+    console.warn("[storage] acquireLease failed, proceeding without lock:", (e as Error).message);
+    return true; // fail-open — a lease error must not freeze refreshes
+  }
+}
+
+export async function releaseLease(holder: string): Promise<void> {
+  try {
+    // Read through the WARM cache, NOT a fresh Blob read. By the time we release,
+    // doRefresh's writes this tick have left the cache holding the correct final
+    // state; Vercel Blob has read-after-write latency, so re-reading here would
+    // resurrect a pre-write snapshot and clobber this tick's games/streaks (the
+    // exact hazard documented on readStoreFresh). We only clear our lock field.
+    const store = await readStore();
+    if (store.lock?.holder === holder) {
+      store.lock = null;
+      await writeStore(store);
+    }
+  } catch (e) {
+    console.warn("[storage] releaseLease failed:", (e as Error).message);
+  }
 }
 
 /**

@@ -59,7 +59,8 @@ function favWinGame(id: string, favSide: "home" | "away"): Game {
       trendUpdatedAt: "2026-06-15T22:00:00.000Z",
     },
     finalResult: {
-      winnerSide: homeScore > awayScore ? "home" : "away",
+      winnerSide:
+        homeScore > awayScore ? "home" : awayScore > homeScore ? "away" : "tie",
       margin: Math.abs(homeScore - awayScore),
       publicCovered: true,
       totalGoOver: false,

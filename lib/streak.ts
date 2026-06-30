@@ -125,11 +125,12 @@ export function applyGameToLeagueStreaks(
   }
 
   // Moneyline streak: did the betting favorite (pickedSide) win the game
-  // outright ("public") or did the underdog win outright ("vegas")? No push —
-  // every final has a straight-up winner. Requires a locked trend so we know
-  // which side was favored pregame.
+  // outright ("public") or did the underdog win outright ("vegas")? A draw
+  // (winnerSide "tie", e.g. an NFL regular-season tie) is a no-decision and is
+  // skipped, like an ATS/Total push. Requires a locked trend so we know which
+  // side was favored pregame.
   const favSide = game.trend?.pickedSide;
-  if (favSide) {
+  if (favSide && game.finalResult.winnerSide !== "tie") {
     const favWon = game.finalResult.winnerSide === favSide;
     const w: MoneylineWinner = favWon ? "public" : "vegas";
     const updated = applyWinner(next.moneyline, game, w, today);
@@ -164,7 +165,9 @@ export function totalWinnerOf(g: Game): TotalWinner | null {
 export function moneylineWinnerOf(g: Game): MoneylineWinner | null {
   const favSide = g.trend?.pickedSide;
   const winnerSide = g.finalResult?.winnerSide;
-  if (!favSide || !winnerSide) return null;
+  // "tie" (a draw) is a no-decision — no straight-up winner — so it never counts
+  // toward the moneyline streak, mirroring atsWinnerOf/totalWinnerOf on a push.
+  if (!favSide || !winnerSide || winnerSide === "tie") return null;
   return winnerSide === favSide ? "public" : "vegas";
 }
 
@@ -425,6 +428,51 @@ export function buildMoneylineEmails(
     });
   }
   return out;
+}
+
+/**
+ * A re-grade — typically an official post-final scoring correction — can shrink
+ * or flip a streak whose milestone we ALREADY emailed (lastNotifiedCount >= 2).
+ * A sent milestone email can't be unsent, so emit one corrective notice. Returns
+ * null when nothing was previously emailed, or the streak still holds at/above
+ * its notified count. This fires at most once per correction: updateCategoryStreak
+ * re-pins lastNotifiedCount down to the new count, so once that's persisted the
+ * condition no longer matches on the next tick.
+ */
+export function buildCorrectionEmail<W extends string>(
+  league: League,
+  category: BetCategory,
+  prev: CategoryStreak<W>,
+  gamesById: Map<string, Game>,
+  winnerOf: (g: Game) => W | null,
+): StreakEmail | null {
+  if (prev.lastNotifiedCount < 2) return null; // never reached an emailed milestone
+  // A real post-final correction means a game we ALREADY counted in the emailed
+  // run now grades DIFFERENTLY (its side flipped, or it became a push/no-decision).
+  // A streak simply ENDING — the next game grading the other way — is NOT a
+  // correction: the previously-counted games still grade exactly as before, so it
+  // must stay silent. We detect a true correction by re-grading the games we
+  // alerted on and checking whether any verdict actually changed.
+  const counted = prev.history.slice(0, prev.lastNotifiedCount);
+  const changed = counted.filter((h) => {
+    const g = gamesById.get(streakHistoryGameId(h.date));
+    if (!g) return false; // aged out of the store — can't tell, so don't alert
+    return winnerOf(g) !== h.winner; // verdict flipped or dropped to a no-decision
+  });
+  if (changed.length === 0) return null;
+  const cat = category.toUpperCase();
+  const wasSide = prev.current ? String(prev.current).toUpperCase() : "";
+  return {
+    league,
+    category,
+    subject: `Fade The Money — CORRECTION: ${league.toUpperCase()} ${cat} streak revised`,
+    text: [
+      `An official score update changed a previously graded result.`,
+      ``,
+      `${league.toUpperCase()} ${cat}: ${changed.length} game(s) in the ${wasSide} ${prev.lastNotifiedCount}-streak we alerted on were re-graded, so that streak has been revised — please disregard the earlier alert.`,
+    ].join("\n"),
+    newLastNotifiedCount: prev.lastNotifiedCount,
+  };
 }
 
 /**

@@ -22,7 +22,11 @@ export function attachFinalResult(g: Game): Game {
   const next: Game = { ...g };
   next.publicCovering = publicCovering(next);
   next.finalResult = {
-    winnerSide: homeScore > awayScore ? "home" : "away",
+    // Three-way: a draw (e.g. an NFL regular-season 17-17 OT tie) is its own
+    // value, not silently collapsed into an "away" win. margin === 0 on a tie,
+    // so ATS/Totals already null out the push; the moneyline grader skips "tie".
+    winnerSide:
+      homeScore > awayScore ? "home" : awayScore > homeScore ? "away" : "tie",
     margin: Math.abs(homeScore - awayScore),
     publicCovered: margin === 0 ? null : next.publicCovering ?? null,
     totalGoOver:

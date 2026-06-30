@@ -298,14 +298,18 @@ function toGame(ev: ApiEvent, league: League): Game | null {
 /**
  * Fetch games for one league across a window centered on today (US-ET).
  *
- * Defaults to ~36h back through ~48h forward so the dashboard can show recent
- * finals, live, and upcoming/tomorrow games in a single pull.
+ * Defaults to ~96h back through ~48h forward. The 96h back-window keeps already-
+ * FINAL games re-fetchable long enough for official post-final scoring
+ * corrections to land — MLB scorer reviews routinely post a day-plus after first
+ * pitch, past the old 36h window, which silently froze a stale score into the
+ * streak. The refresh re-grades each tick, so a corrected score self-heals the
+ * streak (see updateCategoryStreak in lib/streak.ts).
  */
 export async function fetchLeagueGames(
   league: League,
   opts: { hoursBack?: number; hoursForward?: number } = {},
 ): Promise<Game[]> {
-  const hoursBack = opts.hoursBack ?? 36;
+  const hoursBack = opts.hoursBack ?? 96;
   const hoursForward = opts.hoursForward ?? 48;
   const now = Date.now();
   const startsAfter = new Date(now - hoursBack * 3600_000).toISOString();

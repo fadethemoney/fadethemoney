@@ -66,7 +66,10 @@ export interface Game {
    */
   finalized?: boolean;
   finalResult?: {
-    winnerSide: Side;
+    // "tie" = a genuine draw (only the NFL regular season can tie). Kept as its
+    // own value so a tie is NOT silently collapsed into an "away" win — the
+    // moneyline grader treats it as a no-decision (null), like an ATS/Total push.
+    winnerSide: Side | "tie";
     margin: number;
     publicCovered: boolean | null; // true = favorite covered; preserves storage shape
     totalGoOver: boolean | null;
@@ -88,8 +91,9 @@ export type AtsWinner = "public" | "vegas";
 // Moneyline streak tracks favorite-vs-dog on the straight-up result. The client
 // confirmed "betting favorites is public": the favorite (pickedSide, derived
 // from the spread) winning the game outright is a "public" win; the underdog
-// winning outright is a "vegas" win. No push — every game has a straight-up
-// winner. Same shape as AtsWinner so all three categories read identically.
+// winning outright is a "vegas" win. A draw (NFL regular-season tie) is a
+// no-decision — graded null, same as an ATS/Total push — and does not touch the
+// streak. Same shape as AtsWinner so all three categories read identically.
 export type MoneylineWinner = "public" | "vegas";
 // Totals streak tracks favorite-vs-dog on the total, NOT over-vs-under — the
 // client cares whether the juice-favorite side keeps winning, not whether the
@@ -120,10 +124,28 @@ export interface DailyRecord {
   games: string[];
 }
 
+/**
+ * Persisted state for the SportsGameOdds fetch-outage alert. We only email on a
+ * STATE CHANGE (a new/different set of failing leagues) or after a cooldown, so
+ * a multi-hour outage doesn't send an alert on every 2-minute cron tick.
+ */
+export interface FetchAlertState {
+  leagues: string[]; // sorted leagues failing at the last alert
+  alertedAt: string; // ISO timestamp of the last alert send
+}
+
 export interface DataStore {
   games: Game[];
   history: DailyRecord[];
   streak: StreakState;
   streaks?: Partial<Record<League, LeagueStreaks>>;
+  /**
+   * Advisory lease so two overlapping cron invocations (Vercel cron is
+   * best-effort and can double-fire) don't run the refresh pipeline at once and
+   * clobber each other's Blob writes or double-send a milestone email. Set in
+   * acquireLease / cleared in releaseLease (lib/storage.ts). Self-expires.
+   */
+  lock?: { holder: string; expiresAt: string } | null;
+  fetchAlert?: FetchAlertState | null;
   lastUpdated: string;
 }
