@@ -77,6 +77,7 @@ interface ApiOdd {
   oddID?: string;
   marketName?: string;
   statID?: string;
+  statEntityID?: string;     // "all" (game) | "home" | "away" | a playerID (prop)
   betTypeID?: string;        // "ml" | "sp" | "ou"
   sideID?: string;           // "home" | "away" | "over" | "under"
   periodID?: string;         // "game" | "1q" | ...
@@ -183,9 +184,17 @@ function fmtAmerican(v: string | number | null | undefined): string | null {
 }
 
 /**
- * Pick the game-period market for the given betType+side from the odds map.
+ * Pick the main full-game market for the given betType+side from the odds map.
  * SportsGameOdds keys odds by composite IDs that vary by sport, so we scan
  * rather than assume a fixed key shape.
+ *
+ * We pin BOTH statID "points" (the normalized scoring stat — runs/points/goals
+ * — across all 5 leagues) AND the expected stat entity. Without the entity pin
+ * we can match a player prop that shares betType/side/period: e.g. a "player
+ * scores a run" O/U of 0.5 (statID "points", statEntityID = a playerID) gets
+ * mistaken for the game total and a bogus 0.5 line freezes into the streak
+ * (the TEX@CLE "Total 0.5" bug). The game total is the aggregate entity "all";
+ * spreads/moneylines are per side (entity == sideID, home/away).
  */
 function findOdd(
   odds: Record<string, ApiOdd> | undefined,
@@ -193,10 +202,13 @@ function findOdd(
   side: string,
 ): ApiOdd | null {
   if (!odds) return null;
+  const wantEntity = betType === "ou" ? "all" : side;
   for (const o of Object.values(odds)) {
     if (o.periodID && o.periodID !== "game") continue;
     if (o.betTypeID !== betType) continue;
     if (o.sideID !== side) continue;
+    if (o.statID !== "points") continue;
+    if (o.statEntityID !== wantEntity) continue;
     return o;
   }
   return null;
