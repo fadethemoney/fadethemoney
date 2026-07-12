@@ -7,6 +7,8 @@ const LEAGUES = [
   { slug: "mlb", label: "MLB" },
   { slug: "nfl", label: "NFL" },
   { slug: "nhl", label: "NHL" },
+  { slug: "ncaab", label: "NCAAB" },
+  { slug: "ncaaf", label: "NCAAF" },
 ];
 
 export function LeagueFilter({ active }: { active?: string }) {

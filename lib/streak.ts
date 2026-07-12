@@ -11,7 +11,7 @@ import type {
 import { totalFavoriteSide } from "./calc";
 import { etDateKeyOf, etKickoffLabel } from "./time";
 
-export const LEAGUES_ALL: League[] = ["nba", "wnba", "mlb", "nfl", "nhl"];
+export const LEAGUES_ALL: League[] = ["nba", "wnba", "mlb", "nfl", "nhl", "ncaab", "ncaaf"];
 
 /**
  * Exact streak counts that trigger an email: one early heads-up at 2, then one

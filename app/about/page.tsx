@@ -34,7 +34,8 @@ export default function AboutPage() {
       </Block>
 
       <Block title="Coverage">
-        NBA, MLB, NFL, NHL — feeds turn on as each season runs.
+        NBA, WNBA, MLB, NFL, NHL, plus AP-ranked college basketball and football —
+        feeds turn on as each season runs.
       </Block>
     </div>
   );

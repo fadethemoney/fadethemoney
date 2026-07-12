@@ -12,6 +12,7 @@ try {
 } catch {}
 
 import { fetchAllGames } from "../lib/sportsgameodds";
+import { filterRankedAllLeagues } from "../lib/rankings";
 import { finalizeGames } from "../lib/merge";
 import { readStore, upsertGames, recordDaily, setStreak, setLeagueStreaks } from "../lib/storage";
 import { summarizeDay, todayKey } from "../lib/calc";
@@ -27,11 +28,13 @@ import {
 } from "../lib/streak";
 import type { League, LeagueStreaks, StreakState } from "../lib/types";
 
-const LEAGUES: League[] = ["nba", "wnba", "mlb", "nfl", "nhl"];
+const LEAGUES: League[] = ["nba", "wnba", "mlb", "nfl", "nhl", "ncaab", "ncaaf"];
 
 async function run() {
   const fetched = await fetchAllGames(LEAGUES);
-  const all = finalizeGames(fetched);
+  // College leagues: AP-ranked matchups only (client: "just ranked", 2026-07-12).
+  const rankedOnly = await filterRankedAllLeagues(fetched);
+  const all = finalizeGames(rankedOnly);
   console.log(`[update] fetched ${all.length} games across ${LEAGUES.length} leagues`);
 
   await upsertGames(all);

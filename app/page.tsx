@@ -18,6 +18,8 @@ const LEAGUE_LABEL: Record<string, string> = {
   mlb: "MLB",
   nfl: "NFL",
   nhl: "NHL",
+  ncaab: "NCAAB",
+  ncaaf: "NCAAF",
 };
 
 function emptyMessage(league: string | undefined, totalGames: number): React.ReactNode {
@@ -29,7 +31,7 @@ function emptyMessage(league: string | undefined, totalGames: number): React.Rea
 
 function eyebrowText(streak: { current: "public" | "vegas" | null; count: number }) {
   if (!streak.current || streak.count === 0) {
-    return "Live · Tracking Public vs Vegas across NBA, MLB, NFL, NHL";
+    return "Live · Tracking Public vs Vegas across NBA, MLB, NFL, NHL + ranked college";
   }
   const who = streak.current === "public" ? "Public" : "Vegas";
   return `Live · ${who} on a ${streak.count}-game ATS run`;

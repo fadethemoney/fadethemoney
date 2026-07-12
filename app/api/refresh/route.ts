@@ -14,6 +14,7 @@ import {
   writeStore,
 } from "@/lib/storage";
 import { summarizeDay, todayKey } from "@/lib/calc";
+import { filterRankedAllLeagues } from "@/lib/rankings";
 import { etDateKeyOf } from "@/lib/time";
 import { notifyAdmin } from "@/lib/mailer";
 import {
@@ -32,7 +33,7 @@ import type { League, LeagueStreaks } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-const LEAGUES: League[] = ["nba", "wnba", "mlb", "nfl", "nhl"];
+const LEAGUES: League[] = ["nba", "wnba", "mlb", "nfl", "nhl", "ncaab", "ncaaf"];
 
 async function runRefresh(opts: { hoursBack?: number; hoursForward?: number } = {}) {
   // Serialize overlapping cron invocations: Vercel cron is best-effort and can
@@ -54,7 +55,10 @@ async function doRefresh(opts: { hoursBack?: number; hoursForward?: number } = {
   const fetchErrors: LeagueFetchError[] = [];
   const fetched = await fetchAllGames(LEAGUES, fetchErrors, opts);
   await alertOnFetchErrors(fetchErrors);
-  const all = finalizeGames(fetched);
+  // College leagues: keep AP-ranked matchups only (client: "just ranked",
+  // 2026-07-12). Full NCAA slates would flood the dashboard and streak emails.
+  const rankedOnly = await filterRankedAllLeagues(fetched);
+  const all = finalizeGames(rankedOnly);
   await upsertGames(all);
 
   // Attach (or re-attach) finalResult on every stored final using the LOCKED

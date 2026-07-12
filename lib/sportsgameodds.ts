@@ -18,6 +18,8 @@ const LEAGUE_TO_API: Record<League, string> = {
   mlb: "MLB",
   nfl: "NFL",
   nhl: "NHL",
+  ncaab: "NCAAB",
+  ncaaf: "NCAAF",
 };
 
 export class SportsGameOddsError extends Error {}

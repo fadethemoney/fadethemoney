@@ -98,7 +98,7 @@ export async function sendWelcomeEmail(to: string, name?: string): Promise<Notif
   const text =
     `Hi ${first},\n\n` +
     `Welcome to Fade The Money — you're in.\n\n` +
-    `We track where the public goes wrong: live public-vs-Vegas streaks across the NFL, NBA, WNBA, MLB and NHL.\n\n` +
+    `We track where the public goes wrong: live public-vs-Vegas streaks across the NFL, NBA, WNBA, MLB, NHL and ranked college football & basketball.\n\n` +
     `Open your dashboard: ${site}\n\n` +
     `For entertainment only · 21+. If you or someone you know has a gambling problem, call 1-800-GAMBLER.`;
 
@@ -112,7 +112,8 @@ export async function sendWelcomeEmail(to: string, name?: string): Promise<Notif
         <h1 style="font-size:20px;color:#1A1A1A;margin:0 0 12px">Welcome, ${safeFirst} 👋</h1>
         <p style="font-size:15px;line-height:1.55;color:#3A3A38;margin:0 0 16px">
           You're in. Fade The Money tracks where the public goes wrong — live
-          public-vs-Vegas streaks across the NFL, NBA, WNBA, MLB and NHL.
+          public-vs-Vegas streaks across the NFL, NBA, WNBA, MLB, NHL and
+          ranked college football &amp; basketball.
         </p>
         <a href="${site}" style="display:inline-block;background:#1B45D9;color:#FFFFFF;text-decoration:none;font-weight:500;font-size:15px;padding:11px 20px;border-radius:6px">
           Open your dashboard →
