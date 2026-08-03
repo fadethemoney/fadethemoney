@@ -110,12 +110,20 @@ export async function getMemberAccess(): Promise<MemberAccess> {
   if (error || !data) {
     // Most likely cause: migration 0006 hasn't been run against this project,
     // so the subscription columns don't exist yet. Fail closed for paid
-    // content but keep staff in, and say so loudly in the logs.
+    // content, but re-read the one column that predates 0006 so admins keep
+    // their own site — otherwise turning the paywall on before running the
+    // migration locks out the people who need to fix it.
     console.error(
       "[subscription] profile read failed — has 0006_subscriptions.sql been run?",
       error?.message,
     );
-    return { ...LOCKED_OUT, signedIn: true };
+    const { data: fallback } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .single<{ role: string | null }>();
+    const staff = fallback?.role === "admin" || fallback?.role === "super_admin";
+    return { ...LOCKED_OUT, signedIn: true, isMember: staff, reason: staff ? "staff" : "none" };
   }
 
   const status: SubscriptionStatus = data.subscription_status ?? "none";
