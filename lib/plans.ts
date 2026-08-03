@@ -19,6 +19,9 @@ export type Plan = {
   name: string;
   /** Headline price, already formatted. */
   price: string;
+  /** Same number, unformatted — used for the admin revenue view. */
+  amount: number;
+  interval: "month" | "year";
   cadence: string;
   /** Shown under the price — value framing, not a legal term. */
   note?: string;
@@ -32,6 +35,8 @@ export const PLANS: Plan[] = [
     id: "monthly",
     name: "Monthly",
     price: "$29.99",
+    amount: 29.99,
+    interval: "month",
     cadence: "per month",
     note: `${TRIAL_DAYS}-day free trial`,
     renewalTerms: `After the ${TRIAL_DAYS}-day free trial, $29.99 is charged every month until you cancel.`,
@@ -41,6 +46,8 @@ export const PLANS: Plan[] = [
     id: "annual",
     name: "Annual",
     price: "$299",
+    amount: 299,
+    interval: "year",
     cadence: "per year",
     note: "Two months free vs monthly",
     renewalTerms: `After the ${TRIAL_DAYS}-day free trial, $299 is charged every year until you cancel.`,
@@ -50,4 +57,11 @@ export const PLANS: Plan[] = [
 
 export function planById(id: string): Plan | undefined {
   return PLANS.find((p) => p.id === id);
+}
+
+/** What a plan contributes to monthly recurring revenue. */
+export function monthlyValueOf(id: SubscriptionPlan): number {
+  const plan = planById(id);
+  if (!plan) return 0;
+  return plan.interval === "year" ? plan.amount / 12 : plan.amount;
 }

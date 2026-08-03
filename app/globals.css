@@ -840,6 +840,31 @@ header.site {
   .pricing-cta { width: 100%; }
 }
 
+/* ---- Legal pages ---- */
+.legal-shell { padding: 40px 0 72px; max-width: 720px; }
+.legal-updated {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-top: 10px;
+}
+.legal-body { margin-top: 28px; font-size: 15px; line-height: 1.7; color: var(--text-secondary); }
+.legal-body p { margin-bottom: 14px; }
+.legal-body strong { color: var(--text); font-weight: 500; }
+.legal-body a { color: var(--accent); }
+.legal-section { margin-top: 30px; }
+.legal-section h2 {
+  font-size: 17px;
+  font-weight: 500;
+  color: var(--text);
+  margin-bottom: 10px;
+  letter-spacing: -0.01em;
+}
+.legal-body ul { margin: 0 0 14px; padding-left: 20px; }
+.legal-body li { margin-bottom: 8px; }
+
 /* ---- Account: membership + alert prefs ---- */
 .membership-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .membership-pill {
@@ -1474,6 +1499,18 @@ footer.site { padding: 32px 0; background: var(--bg-footer); }
   color: var(--text);
 }
 .stat-trend { font-size: 12px; color: var(--text-secondary); margin-top: 6px; }
+.stat-note { font-size: 12px; color: var(--text-muted); margin-top: 6px; line-height: 1.4; }
+.stat-card.warn { border-color: rgba(226, 148, 95, 0.45); }
+.stat-card.warn .stat-value { color: var(--vegas-text); }
+
+/* Members table: same shell as Users, different column mix */
+.ul-head-members,
+.ul-row-members { grid-template-columns: 1.6fr 1fr 0.7fr 1fr 1.2fr; }
+.ul-note { display: block; font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+.ul-note.warn { color: var(--vegas-text); }
+@media (max-width: 860px) {
+  .ul-row-members { grid-template-columns: 1fr; }
+}
 
 /* Two-column content area (stacks on mobile) */
 .admin-grid-2 { display: grid; grid-template-columns: 1fr; gap: 16px; }

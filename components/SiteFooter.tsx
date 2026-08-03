@@ -13,7 +13,10 @@ export function SiteFooter() {
           <Link href="/">Dashboard</Link>
           <Link href="/results">Results</Link>
           <Link href="/about">About</Link>
+          <Link href="/pricing">Membership</Link>
+          <Link href="/terms">Terms</Link>
           <Link href="/privacy">Privacy</Link>
+          <Link href="/disclaimer">Disclaimer</Link>
         </div>
       </div>
     </footer>

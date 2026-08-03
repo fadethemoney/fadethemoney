@@ -57,7 +57,9 @@ export default async function PricingPage() {
           <p className="pricing-fineprint">
             Fade The Money publishes sports information and statistics. We are not a
             sportsbook, we don&apos;t accept wagers, and nothing here is a guarantee of
-            results.
+            results. See our <Link href="/terms">Terms</Link>,{" "}
+            <Link href="/privacy">Privacy Policy</Link> and{" "}
+            <Link href="/disclaimer">disclaimer</Link>.
           </p>
         </>
       )}

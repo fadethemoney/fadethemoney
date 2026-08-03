@@ -8,6 +8,7 @@ const TABS = [
   { href: "/admin/notifications", label: "Notifications" },
   { href: "/admin/news", label: "News" },
   { href: "/admin/users", label: "Users" },
+  { href: "/admin/members", label: "Members" },
 ];
 
 /** Sticky tab nav shared by every admin screen. Highlights the active section. */
