@@ -14,7 +14,11 @@
       "Bash(node -e \"const s=require\\('./data/store.json'\\); const all=s.games.reduce\\(\\(a,g\\)=>{const d=new Intl.DateTimeFormat\\('en-CA',{timeZone:'America/New_York',year:'numeric',month:'2-digit',day:'2-digit'}\\).format\\(new Date\\(g.startTime\\)\\); a[d]=a[d]||{}; a[d][g.status]=\\(a[d][g.status]||0\\)+1; return a;},{}\\); console.log\\(all\\); console.log\\('history:', s.history.slice\\(0,7\\)\\);\")",
       "Bash(node -e \"const s=require\\('./data/store.json'\\); const all=s.games.reduce\\(\\(a,g\\)=>{const d=new Intl.DateTimeFormat\\('en-CA',{timeZone:'America/New_York',year:'numeric',month:'2-digit',day:'2-digit'}\\).format\\(new Date\\(g.startTime\\)\\); a[d]=a[d]||{}; a[d][g.status]=\\(a[d][g.status]||0\\)+1; return a;},{}\\); console.log\\('by ET date:',all\\); console.log\\(\\); console.log\\('history:'\\); for\\(const h of s.history.slice\\(0,7\\)\\) console.log\\(' ',h.date,'pub',h.publicWins,'veg',h.vegasWins,'push',h.pushes,'games',h.games.length\\);\")",
       "Bash(node -e \"const s=require\\('./data/store.json'\\); console.log\\('history:'\\); for\\(const h of s.history.slice\\(0,7\\)\\) console.log\\(' ',h.date,'pub',h.publicWins,'veg',h.vegasWins,'push',h.pushes,'games',h.games.length\\);\")",
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "WebFetch(domain:stripe.com)",
+      "PowerShell(if \\(Test-Path .env.local\\) { Get-Content .env.local | ForEach-Object { \\($_ -split '='\\)[0] } | Where-Object { $_ -and $_ -notmatch '^#' } } else { 'NO .env.local' })",
+      "PowerShell(npm install stripe)",
+      "PowerShell(npx tsc --noEmit -p tsconfig.json)"
     ]
   }
 }

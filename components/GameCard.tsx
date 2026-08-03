@@ -36,11 +36,26 @@ function timeLabel(g: Game) {
   return `${date} · ${time} ET`;
 }
 
-export function GameCard({ game, market = "spread" }: { game: Game; market?: Market }) {
+export function GameCard({
+  game,
+  market = "spread",
+  locked = false,
+}: {
+  game: Game;
+  market?: Market;
+  /**
+   * Free tier: the pick fields are already stripped from `game` server-side
+   * (lib/paywall.ts). This flag only decides whether the gaps read as a
+   * "members only" prompt instead of an empty dash — finished games are
+   * never locked, so their results still show.
+   */
+  locked?: boolean;
+}) {
   const t = game.trend;
-  const favSide: Side | null = t?.pickedSide ?? null;
-  const totalFav = totalFavoriteSide(t); // "over" | "under" | null
   const isFinal = game.status === "final" && game.finalResult;
+  const hidePick = locked && game.status !== "final";
+  const favSide: Side | null = t?.pickedSide ?? null;
+  const totalFav = hidePick ? null : totalFavoriteSide(t); // "over" | "under" | null
   const totalOver = totalGoingOver(game);
   const covering = market === "total" ? totalOver : publicCovering(game);
 
@@ -90,14 +105,18 @@ export function GameCard({ game, market = "spread" }: { game: Game; market?: Mar
           {t && (
             <>
               {" · "}
-              {market === "total"
+              {hidePick
+                ? <a className="pick-locked" href="/pricing">Pick: members only</a>
+                : market === "total"
                 ? <>Favorite: {totalFav ? totalFav.toUpperCase() : "—"} {t.total}</>
                 : <>Public: {favSide === "home" ? game.home.abbr : game.away.abbr}{" "}
                     {fmtSpread(favSide === "home" ? t.spread : -t.spread)}</>}
             </>
           )}
         </span>
-        <ResultPill game={game} covering={covering} market={market} />
+        {hidePick && game.status === "live"
+          ? <a className="result-pill result-locked" href="/pricing">Locked</a>
+          : <ResultPill game={game} covering={covering} market={market} />}
       </div>
 
       {isFinal && t && <ResultLine game={game} market={market} />}

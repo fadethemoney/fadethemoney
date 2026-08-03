@@ -36,7 +36,7 @@ export function totalFavoriteSide(
  * Returns true (covering), false (not covering), or null (push / unknown).
  */
 export function publicCovering(game: Game): boolean | null {
-  if (!game.trend) return null;
+  if (!game.trend?.pickedSide) return null;
   // 0-0 isn't "Vegas winning" — there's just no game yet.
   if (game.status !== "live" && game.status !== "final") return null;
   const homeScore = game.home.score ?? 0;

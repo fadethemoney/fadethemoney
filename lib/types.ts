@@ -31,7 +31,12 @@ export interface BettingTrend {
   totalOddsOver: string | null;
   totalOddsUnder: string | null;
 
-  pickedSide: Side;        // favored side (derived from spread)
+  /**
+   * Favored side (derived from spread). Optional because the Phase 3 free
+   * tier has it stripped server-side before render — see lib/paywall.ts.
+   * Absent means "not entitled to see it", never "no favorite".
+   */
+  pickedSide?: Side;
 
   openingSpread?: number;
   openingTotal?: number;

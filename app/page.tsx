@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { readStore } from "@/lib/storage";
 import { todayKey } from "@/lib/calc";
 import { etDateKeyOf } from "@/lib/time";
@@ -7,6 +8,8 @@ import { StreakBanner } from "@/components/StreakBanner";
 import { LeagueFilter } from "@/components/LeagueFilter";
 import { NewsSection } from "@/components/NewsSection";
 import { getPublishedArticles } from "@/lib/articles";
+import { getMemberAccess } from "@/lib/subscription";
+import { redactStoreForFreeTier } from "@/lib/paywall";
 import type { Game } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -68,7 +71,16 @@ export default async function HomePage({
   searchParams: Promise<{ league?: string }>;
 }) {
   const { league } = await searchParams;
-  const [store, latestNews] = await Promise.all([readStore(), getPublishedArticles(8)]);
+  const [rawStore, latestNews, access] = await Promise.all([
+    readStore(),
+    getPublishedArticles(8),
+    getMemberAccess(),
+  ]);
+  // Free tier: strip picks + streaks here, before anything renders. Every
+  // read below works off the redacted store, so locked data never reaches
+  // the browser (lib/paywall.ts).
+  const locked = !access.isMember;
+  const store = locked ? redactStoreForFreeTier(rawStore) : rawStore;
   const today = todayKey();
   const tomorrow = nextDayKey(today);
   const leagueFiltered = league ? store.games.filter((g) => g.league === league) : store.games;
@@ -117,40 +129,56 @@ export default async function HomePage({
           </h1>
           <p className="lede">
             Live odds, spreads, totals, and ATS results for every game across the major
-            US leagues. Favorite-vs-underdog streaks updated in real time. Free.
+            US leagues.{" "}
+            {locked
+              ? "Members get the picks, the favorite-vs-underdog streaks, and an email the moment a run forms."
+              : "Favorite-vs-underdog streaks updated in real time."}
           </p>
           <div className="secondary-link">
-            <a href="#games">Scroll for live games ↓</a>
+            {locked ? (
+              <>
+                <Link href="/pricing" className="btn-primary btn-join">
+                  Start 7-day trial
+                </Link>
+                <a href="#games" style={{ marginLeft: 16 }}>Scroll for live games ↓</a>
+              </>
+            ) : (
+              <a href="#games">Scroll for live games ↓</a>
+            )}
           </div>
         </div>
       </section>
 
       <div className="container" id="games">
-        <StreakBanner streak={store.streak} />
+        <StreakBanner streak={store.streak} locked={locked} />
         <LeagueFilter active={league} />
 
         {groups.live.length > 0 && (
           <GamesSection
             label={`Live · ${groups.live.length} game${groups.live.length === 1 ? "" : "s"}`}
             games={groups.live}
+            locked={locked}
           />
         )}
         {groups.finals.length > 0 && (
           <GamesSection
             label={`Recent results · ${groups.finals.length} game${groups.finals.length === 1 ? "" : "s"}`}
             games={groups.finals}
+            locked={locked}
           />
         )}
         {groups.upcoming.length > 0 && (
           <GamesSection
             label={`Upcoming · ${groups.upcoming.length} game${groups.upcoming.length === 1 ? "" : "s"}`}
             games={groups.upcoming}
+            locked={locked}
           />
         )}
         {tomorrowUpcoming.length > 0 && (
           <GamesSection
             label={`Tomorrow · ${tomorrowUpcoming.length} game${tomorrowUpcoming.length === 1 ? "" : "s"}`}
             games={tomorrowUpcoming}
+            locked={locked}
           />
         )}
 
@@ -158,6 +186,7 @@ export default async function HomePage({
           <GamesSection
             label={`Next up · ${upcomingFallback.length} game${upcomingFallback.length === 1 ? "" : "s"}`}
             games={upcomingFallback}
+            locked={locked}
           />
         )}
 
@@ -170,6 +199,8 @@ export default async function HomePage({
           </>
         )}
       </div>
+
+      {locked && <JoinBand />}
 
       <NewsSection articles={latestNews} />
 
@@ -224,6 +255,30 @@ export default async function HomePage({
       </section>
 
     </>
+  );
+}
+
+/** Conversion band shown to free visitors between the board and the news. */
+function JoinBand() {
+  return (
+    <section className="join-band">
+      <div className="container">
+        <div className="section-h">Members</div>
+        <h2 className="section-title serif">
+          The board is free.<br />
+          <em>The picks are ours.</em>
+        </h2>
+        <ul className="join-list">
+          <li>Every pick unlocked across all 7 leagues — spread, total and moneyline</li>
+          <li>Live favorite-vs-underdog streaks the moment a run forms</li>
+          <li>Streak alert emails for the leagues you choose</li>
+          <li>Cancel anytime — access runs to the end of the paid period</li>
+        </ul>
+        <Link href="/pricing" className="btn-primary btn-join">
+          Start 7-day trial
+        </Link>
+      </div>
+    </section>
   );
 }
 

@@ -5,7 +5,16 @@ import { GameCard } from "./GameCard";
 
 type Market = "ml" | "spread" | "total";
 
-export function GamesSection({ label, games }: { label: string; games: Game[] }) {
+export function GamesSection({
+  label,
+  games,
+  locked = false,
+}: {
+  label: string;
+  games: Game[];
+  /** Free tier — see GameCard. Picks are already stripped from `games`. */
+  locked?: boolean;
+}) {
   const [market, setMarket] = useState<Market>("spread");
 
   return (
@@ -36,7 +45,7 @@ export function GamesSection({ label, games }: { label: string; games: Game[] })
       </div>
 
       <div className="games-grid">
-        {games.map((g) => <GameCard key={g.id} game={g} market={market} />)}
+        {games.map((g) => <GameCard key={g.id} game={g} market={market} locked={locked} />)}
       </div>
     </section>
   );

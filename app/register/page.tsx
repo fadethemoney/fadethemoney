@@ -9,7 +9,7 @@ import { AuthBanner } from "@/components/auth/AuthBanner";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { bootstrapSuperAdmin, welcomeNewUser } from "@/app/auth/actions";
 import { isValidEmail, passwordIssue, phoneIssue } from "@/lib/validation";
-import { landingPathForRole } from "@/lib/landing";
+import { landingPathForRole, safeInternalPath } from "@/lib/landing";
 
 type Form = {
   name: string;
@@ -61,6 +61,12 @@ export default function RegisterPage() {
     setFormError(undefined);
     setExists(false);
 
+    // Someone who started at /pricing comes back there once the account
+    // exists, so the join flow doesn't dead-end at the account page.
+    const nextPath = safeInternalPath(
+      new URLSearchParams(window.location.search).get("next"),
+    );
+
     const supabase = createSupabaseBrowserClient();
     const { data, error } = await supabase.auth.signUp({
       email: form.email,
@@ -71,7 +77,9 @@ export default function RegisterPage() {
           phone: form.phone.trim(),
           address: form.address.trim(),
         },
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
+        emailRedirectTo: `${window.location.origin}/auth/callback${
+          nextPath ? `?next=${encodeURIComponent(nextPath)}` : ""
+        }`,
       },
     });
 
@@ -105,7 +113,7 @@ export default function RegisterPage() {
         const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
         role = profile?.role ?? undefined;
       }
-      window.location.assign(landingPathForRole(role));
+      window.location.assign(nextPath ?? landingPathForRole(role));
       return;
     }
     // Confirmation ON → verification email sent.
