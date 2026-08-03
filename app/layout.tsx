@@ -6,6 +6,7 @@ import { AnnouncementBar } from "@/components/AnnouncementBar";
 import { BottomNav } from "@/components/BottomNav";
 import { getActiveNotifications } from "@/lib/notifications";
 import { getSessionUser } from "@/lib/auth";
+import { getMemberAccess } from "@/lib/subscription";
 
 // Render per request so the announcement bar always reflects the latest active
 // tips (no stale build-time snapshot).
@@ -18,10 +19,12 @@ export const metadata: Metadata = {
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  // The announcement bar (active tips) is only shown to signed-in users —
-  // anonymous visitors don't see it. Phase 3 will narrow this to paid subscribers.
-  const user = await getSessionUser();
-  const tips = user ? await getActiveNotifications() : [];
+  // The announcement bar carries the picks the admin sends out, so it is
+  // member-only content: fetched only once the paywall says this visitor is
+  // entitled. With the paywall switched off getMemberAccess() lets everyone
+  // through, which keeps today's behaviour for signed-in users.
+  const [user, access] = await Promise.all([getSessionUser(), getMemberAccess()]);
+  const tips = user && access.isMember ? await getActiveNotifications() : [];
 
   return (
     <html lang="en">

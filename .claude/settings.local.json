@@ -18,7 +18,18 @@
       "WebFetch(domain:stripe.com)",
       "PowerShell(if \\(Test-Path .env.local\\) { Get-Content .env.local | ForEach-Object { \\($_ -split '='\\)[0] } | Where-Object { $_ -and $_ -notmatch '^#' } } else { 'NO .env.local' })",
       "PowerShell(npm install stripe)",
-      "PowerShell(npx tsc --noEmit -p tsconfig.json)"
+      "PowerShell(npx tsc --noEmit -p tsconfig.json)",
+      "PowerShell($env:PAYWALL_ENABLED=\"true\"; Start-Process -FilePath \"npm\" -ArgumentList \"run\",\"dev\" -WindowStyle Hidden -RedirectStandardOutput \"$env:TEMP\\\\ftm-dev.log\" -RedirectStandardError \"$env:TEMP\\\\ftm-dev.err\"; Start-Sleep -Seconds 18; Get-Content \"$env:TEMP\\\\ftm-dev.log\" -Tail 8)",
+      "Bash(PAYWALL_ENABLED=true npx next dev -p 3111 > /tmp/ftm-dev.log 2>&1 & *)",
+      "Bash(curl -s http://localhost:3111/ -o /tmp/home-anon.html)",
+      "Bash(echo \"status: $?\")",
+      "Bash(curl -s http://localhost:3111/api/games -o /tmp/games-anon.json)",
+      "Bash(node -e \"const s=require\\('/tmp/games-anon.json'\\); console.log\\('streak:', JSON.stringify\\(s.streak\\)\\); console.log\\('streaks keys:', Object.keys\\(s.streaks||{}\\)\\); const g=s.games.filter\\(x=>x.status!=='final'\\); console.log\\('non-final games:', g.length, '| any pickedSide:', g.some\\(x=>x.trend&&'pickedSide' in x.trend\\)\\); const f=s.games.filter\\(x=>x.status==='final'\\); console.log\\('final games:', f.length, '| finals keep pick:', f.some\\(x=>x.trend&&'pickedSide' in x.trend\\)\\);\")",
+      "Bash(curl -s http://localhost:3111/api/games -o C:/Users/user/AppData/Local/Temp/claude/d--2026-bat-project/9455dc1c-d018-4c78-b21e-18e6978eb344/scratchpad/games-anon.json)",
+      "Bash(pkill -f \"next dev\")"
+    ],
+    "additionalDirectories": [
+      "\\tmp"
     ]
   }
 }

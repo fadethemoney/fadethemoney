@@ -16,9 +16,9 @@ const CONFIGURED =
  * service-role client so the bar shows to ALL visitors (the notifications RLS
  * only grants reads to signed-in users; public dashboard visitors are anon).
  *
- * NOTE for Phase 3 (paywall): tips are meant to become paid content. When the
- * subscription gate ships, this should switch to a per-user check instead of a
- * blanket public read. Fine for the demo / pre-launch.
+ * Entitlement is checked by the caller, not here: app/layout.tsx only calls
+ * this once getMemberAccess() says the visitor is a member (Phase 3), so the
+ * service-role read below never reaches a non-member's page.
  *
  * Always returns an array and never throws, so the root layout can't crash if
  * the DB is unreachable or env is missing.
