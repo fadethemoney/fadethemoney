@@ -16,7 +16,7 @@ import {
 import { summarizeDay, todayKey } from "@/lib/calc";
 import { filterRankedAllLeagues } from "@/lib/rankings";
 import { etDateKeyOf } from "@/lib/time";
-import { notifyAdmin } from "@/lib/mailer";
+import { notifyAdmin, sendStreakAlert } from "@/lib/mailer";
 import {
   atsWinnerOf,
   buildAtsEmails,
@@ -140,9 +140,9 @@ async function doRefresh(opts: { hoursBack?: number; hoursForward?: number } = {
     ]) {
       if (!corr) continue;
       try {
-        await notifyAdmin({ subject: corr.subject, text: corr.text });
+        await sendStreakAlert({ league, subject: corr.subject, text: corr.text });
       } catch (e) {
-        console.warn(`[refresh] notifyAdmin (${corr.category} correction) failed:`, (e as Error).message);
+        console.warn(`[refresh] alert (${corr.category} correction) failed:`, (e as Error).message);
       }
     }
 
@@ -150,20 +150,36 @@ async function doRefresh(opts: { hoursBack?: number; hoursForward?: number } = {
     // confirmed send; on failure, break so this milestone stays in the notify
     // window and retries next tick (instead of being silently skipped) and a
     // later milestone can't leapfrog an un-sent earlier one.
+    //
+    // Phase 3: these now fan out to every entitled member who has this league
+    // switched on (lib/alert-recipients.ts), not just ADMIN_EMAIL. A delivery
+    // failure holds the milestone open for the next tick; "skipped" (no mail
+    // provider, or nobody subscribed to this league) does not — there is
+    // nothing to retry, so the streak moves on.
     for (const email of buildAtsEmails(league, ls.ats, gameById, nextGame)) {
+      let res;
       try {
-        await notifyAdmin({ subject: email.subject, text: email.text });
+        res = await sendStreakAlert({ league, subject: email.subject, text: email.text });
       } catch (e) {
-        console.warn("[refresh] notifyAdmin (ats) failed:", (e as Error).message);
+        console.warn("[refresh] alert (ats) threw:", (e as Error).message);
+        break;
+      }
+      if (!res.ok && !res.skipped) {
+        console.warn("[refresh] alert (ats) undelivered:", res.error);
         break;
       }
       ls.ats = { ...ls.ats, lastNotifiedCount: email.newLastNotifiedCount };
     }
     for (const email of buildTotalEmails(league, ls.total, gameById, nextGame)) {
+      let res;
       try {
-        await notifyAdmin({ subject: email.subject, text: email.text });
+        res = await sendStreakAlert({ league, subject: email.subject, text: email.text });
       } catch (e) {
-        console.warn("[refresh] notifyAdmin (total) failed:", (e as Error).message);
+        console.warn("[refresh] alert (total) threw:", (e as Error).message);
+        break;
+      }
+      if (!res.ok && !res.skipped) {
+        console.warn("[refresh] alert (total) undelivered:", res.error);
         break;
       }
       ls.total = { ...ls.total, lastNotifiedCount: email.newLastNotifiedCount };

@@ -1,4 +1,7 @@
 import { Resend } from "resend";
+import { getAlertRecipients } from "@/lib/alert-recipients";
+import { unsubscribeUrl } from "@/lib/unsub";
+import type { League } from "@/lib/types";
 
 export interface NotifyOptions {
   subject: string;
@@ -66,6 +69,99 @@ export async function notifyAdmin(opts: NotifyOptions): Promise<NotifyResult> {
     console.error("[mailer] exception:", msg);
     return { ok: false, error: msg };
   }
+}
+
+/**
+ * Send a streak alert to every entitled member for a league.
+ *
+ * Phase 3 replacement for the hardcoded ADMIN_EMAIL blast. Differences that
+ * matter:
+ *   - recipients come from lib/alert-recipients.ts (paid + comp + staff,
+ *     filtered by each member's league choices), never from env alone
+ *   - one email per person via Resend's batch API, so nobody sees another
+ *     subscriber's address
+ *   - every member copy carries a personal one-click unsubscribe link and
+ *     the matching List-Unsubscribe headers
+ *
+ * Returns ok:false when nothing could be delivered, which is what tells the
+ * refresh pipeline to keep the milestone in its notify window and retry
+ * rather than marking it sent.
+ */
+export async function sendStreakAlert(opts: {
+  league: League;
+  subject: string;
+  text: string;
+}): Promise<NotifyResult & { sent?: number }> {
+  const { RESEND_API_KEY, ALERT_FROM, NEXT_PUBLIC_SITE_URL } = process.env;
+  if (!RESEND_API_KEY) {
+    console.warn("[mailer] Resend not configured — skipping:", opts.subject);
+    return { ok: false, skipped: true, error: "missing RESEND_API_KEY" };
+  }
+
+  const recipients = await getAlertRecipients(opts.league);
+  if (recipients.length === 0) {
+    console.warn("[mailer] no recipients for", opts.league, "—", opts.subject);
+    return { ok: false, skipped: true, error: "no recipients" };
+  }
+
+  const resend = new Resend(RESEND_API_KEY);
+  const from = ALERT_FROM ?? "Fade The Money <onboarding@resend.dev>";
+  const site = (NEXT_PUBLIC_SITE_URL ?? "https://fadethemoney.com").replace(/\/$/, "");
+  const bodyHtml = escapeHtml(opts.text).replace(/\n/g, "<br>");
+
+  const messages = recipients.map((r) => {
+    // Owner copies (no profile row) get the account link but no token.
+    const unsub = r.userId ? unsubscribeUrl(r.userId, site) : `${site}/account`;
+    return {
+      from,
+      to: r.email,
+      subject: opts.subject,
+      text: `${opts.text}\n\n—\nManage which leagues alert you: ${site}/account\nUnsubscribe from all streak alerts: ${unsub}`,
+      html: `<div style="font-family:-apple-system,Segoe UI,sans-serif;max-width:540px">
+         <p>${bodyHtml}</p>
+         <p><a href="${site}" style="color:#1B45D9">Open the dashboard →</a></p>
+         <hr style="border:0;border-top:1px solid #ddd;margin:24px 0">
+         <p style="font-size:12px;color:#888;line-height:1.5">
+           You're getting this because a betting trend streak hit a notify threshold
+           in ${opts.league.toUpperCase()}. Spreads use favorite = Public, dog = Vegas.
+           Totals track the side of the total that won (OVER or UNDER) plus which side
+           was favored by the juice.<br>
+           <a href="${site}/account" style="color:#888">Choose your leagues</a> ·
+           <a href="${unsub}" style="color:#888">Unsubscribe from all alerts</a><br>
+           For entertainment only · 21+. Gambling problem? Call 1-800-GAMBLER.
+         </p>
+       </div>`,
+      headers: r.userId
+        ? {
+            "List-Unsubscribe": `<${unsub}>`,
+            "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+          }
+        : undefined,
+    };
+  });
+
+  // Resend caps a batch at 100 messages.
+  let sent = 0;
+  let lastError: string | undefined;
+  for (let i = 0; i < messages.length; i += 100) {
+    const chunk = messages.slice(i, i + 100);
+    try {
+      const res = await resend.batch.send(chunk);
+      if (res.error) {
+        lastError = JSON.stringify(res.error);
+        console.error("[mailer] batch error:", res.error);
+        continue;
+      }
+      sent += chunk.length;
+    } catch (e) {
+      lastError = e instanceof Error ? e.message : String(e);
+      console.error("[mailer] batch exception:", lastError);
+    }
+  }
+
+  if (sent === 0) return { ok: false, error: lastError ?? "no emails sent" };
+  console.log(`[mailer] streak alert sent to ${sent}/${messages.length} (${opts.league})`);
+  return { ok: true, sent };
 }
 
 /**
