@@ -840,6 +840,50 @@ header.site {
   .pricing-cta { width: 100%; }
 }
 
+/* ---- Account: membership + alert prefs ---- */
+.membership-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.membership-pill {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 5px 11px;
+  border-radius: 3px;
+  background: var(--bg-section);
+  color: var(--text-muted);
+}
+.membership-pill.ok { background: var(--public-bg); color: var(--public-text); }
+.membership-pill.warn { background: var(--vegas-bg); color: var(--vegas-text); }
+.membership-plan { font-size: 13px; color: var(--text-secondary); }
+.membership-summary {
+  margin: 12px 0 0;
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+.membership-note { margin-top: 12px; font-size: 12px; color: var(--text-muted); line-height: 1.55; }
+
+.league-toggles { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0 4px; }
+.league-toggle {
+  min-height: 42px;
+  padding: 9px 16px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.league-toggle.on {
+  border-color: var(--accent);
+  background: var(--accent-surface);
+  color: var(--accent);
+}
+.league-toggle.on::before { content: "✓ "; }
+
 .card-resultline {
   padding: 9px 16px;
   font-size: 12px;

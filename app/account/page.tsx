@@ -5,6 +5,11 @@ import { Field } from "@/components/auth/Field";
 import { AuthBanner } from "@/components/auth/AuthBanner";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { isValidEmail, passwordIssue, phoneIssue } from "@/lib/validation";
+import { MembershipSection, type MembershipInfo } from "@/components/account/MembershipSection";
+import { AlertPreferences } from "@/components/account/AlertPreferences";
+import type { League } from "@/lib/types";
+
+const ALL_LEAGUES: League[] = ["nba", "wnba", "mlb", "nfl", "nhl", "ncaab", "ncaaf"];
 
 function initials(name: string) {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -38,6 +43,12 @@ export default function AccountPage() {
 
   const [loggedOut, setLoggedOut] = useState(false);
 
+  // Phase 3: subscription state + alert prefs. Null while the columns are
+  // missing (migration 0006 not yet applied), which hides those sections
+  // rather than breaking the page.
+  const [membership, setMembership] = useState<MembershipInfo | null>(null);
+  const [alertLeagues, setAlertLeagues] = useState<League[] | null>(null);
+
   useEffect(() => {
     (async () => {
       const {
@@ -47,20 +58,52 @@ export default function AccountPage() {
         window.location.assign("/login");
         return;
       }
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("profiles")
-        .select("name, email, phone, address")
+        .select(
+          "name, email, phone, address, subscription_status, subscription_plan, current_period_end, cancel_at_period_end, is_comp, stripe_customer_id, alert_leagues",
+        )
         .eq("id", user.id)
         .single();
-      const name = data?.name ?? "";
-      const email = data?.email ?? user.email ?? "";
-      const phone = data?.phone ?? "";
-      const address = data?.address ?? "";
+
+      // Pre-0006 fallback: retry with only the Phase 2 columns.
+      const row =
+        data ??
+        (error
+          ? (
+              await supabase
+                .from("profiles")
+                .select("name, email, phone, address")
+                .eq("id", user.id)
+                .single()
+            ).data
+          : null);
+
+      const name = row?.name ?? "";
+      const email = row?.email ?? user.email ?? "";
+      const phone = row?.phone ?? "";
+      const address = row?.address ?? "";
       setUserId(user.id);
       setProfile({ name, email, phone, address });
       setNameInput(name);
       setPhoneInput(phone);
       setAddressInput(address);
+
+      if (data) {
+        setMembership({
+          status: data.subscription_status ?? "none",
+          plan: data.subscription_plan ?? null,
+          currentPeriodEnd: data.current_period_end ?? null,
+          cancelAtPeriodEnd: data.cancel_at_period_end ?? false,
+          isComp: data.is_comp ?? false,
+          hasBillingAccount: !!data.stripe_customer_id,
+        });
+        setAlertLeagues(
+          Array.isArray(data.alert_leagues) && data.alert_leagues.length
+            ? (data.alert_leagues as League[])
+            : ALL_LEAGUES,
+        );
+      }
       setReady(true);
     })();
   }, [supabase]);
@@ -161,6 +204,22 @@ export default function AccountPage() {
           <div className="account-email">{profile.email}</div>
         </div>
       </div>
+
+      {membership && <MembershipSection membership={membership} />}
+
+      {alertLeagues && (
+        <AlertPreferences
+          userId={userId}
+          initial={alertLeagues}
+          canReceiveAlerts={
+            !!membership &&
+            (membership.isComp ||
+              membership.status === "trialing" ||
+              membership.status === "active" ||
+              membership.status === "past_due")
+          }
+        />
+      )}
 
       {/* Profile: name + contact details */}
       <section className="account-section">
