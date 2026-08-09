@@ -13,8 +13,14 @@ import type { SubscriptionPlan } from "@/lib/subscription.types";
  * Consent is required before the button enables, and the exact wording is
  * recorded with the Checkout session.
  */
-export function PricingPlans({ signedIn }: { signedIn: boolean }) {
-  const [plan, setPlan] = useState<SubscriptionPlan>("monthly");
+export function PricingPlans({
+  signedIn,
+  initialPlan = "monthly",
+}: {
+  signedIn: boolean;
+  initialPlan?: SubscriptionPlan;
+}) {
+  const [plan, setPlan] = useState<SubscriptionPlan>(initialPlan);
   const [consent, setConsent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
@@ -24,8 +30,10 @@ export function PricingPlans({ signedIn }: { signedIn: boolean }) {
   async function startCheckout() {
     if (!consent || busy) return;
     if (!signedIn) {
-      // Create the account first, then come straight back here.
-      window.location.assign(`/register?next=${encodeURIComponent("/pricing")}`);
+      // Create the account first, then come straight back here with the plan
+      // they already chose still selected — re-picking it after a round trip
+      // through the inbox is friction on the one screen that can't afford any.
+      window.location.assign(`/register?next=${encodeURIComponent(`/pricing?plan=${plan}`)}`);
       return;
     }
     setBusy(true);
