@@ -320,6 +320,8 @@ header.site {
 }
 .secondary-link { font-size: 13px; color: var(--text-secondary); margin-top: 16px; display: inline-block; }
 .secondary-link a { color: var(--accent); text-decoration: none; }
+/* A join button nested in a secondary link keeps the button's own dark-on-gold text. */
+.secondary-link a.btn-primary { color: var(--on-accent); }
 
 /* Streak banner */
 .streak-banner {
