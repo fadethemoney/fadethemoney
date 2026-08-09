@@ -323,6 +323,58 @@ header.site {
 /* A join button nested in a secondary link keeps the button's own dark-on-gold text. */
 .secondary-link a.btn-primary { color: var(--on-accent); }
 
+/* Failed-payment banner (above the announcement bar, signed-in members only) */
+.billing-alert {
+  background: var(--vegas-bg);
+  border-bottom: 1px solid rgba(226, 148, 95, 0.35);
+}
+.billing-alert-inner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 32px;
+}
+.billing-alert-tag {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  background: rgba(226, 148, 95, 0.18);
+  color: var(--vegas-text);
+  padding: 3px 8px;
+  border-radius: 4px;
+}
+.billing-alert-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  color: #F0C4A4;
+}
+.billing-alert-btn {
+  flex-shrink: 0;
+  background: var(--vegas-text);
+  color: #24140C;
+  border: none;
+  border-radius: 5px;
+  padding: 7px 14px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.billing-alert-btn:hover { opacity: 0.9; }
+.billing-alert-btn:disabled { opacity: 0.6; cursor: default; }
+@media (max-width: 640px) {
+  .billing-alert-inner {
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 10px 20px;
+  }
+  .billing-alert-text { flex-basis: 100%; order: 3; font-size: 13px; }
+  .billing-alert-btn { margin-left: auto; }
+}
+
 /* Streak banner */
 .streak-banner {
   margin: 0 0 36px;
