@@ -77,9 +77,12 @@ export default function RegisterPage() {
           phone: form.phone.trim(),
           address: form.address.trim(),
         },
-        emailRedirectTo: `${window.location.origin}/auth/callback${
-          nextPath ? `?next=${encodeURIComponent(nextPath)}` : ""
-        }`,
+        // Point at the token_hash route, not the PKCE one: the link has to
+        // work when it's opened in a webmail tab or a link scanner rather
+        // than the browser that started signup. The `?next=` is always
+        // present (empty is fine) so the email template can append
+        // `&token_hash=…` to this URL without guessing at punctuation.
+        emailRedirectTo: `${window.location.origin}/auth/confirm?next=${encodeURIComponent(nextPath ?? "")}`,
       },
     });
 

@@ -28,7 +28,9 @@ export default function ForgotPasswordPage() {
 
     const supabase = createSupabaseBrowserClient();
     const { error: resetErr } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/auth/callback?next=/reset-password`,
+      // token_hash route, same reason as signup: a reset link is nearly always
+      // opened somewhere other than the browser that asked for it.
+      redirectTo: `${window.location.origin}/auth/confirm?next=%2Freset-password`,
     });
     setLoading(false);
     if (resetErr) {
