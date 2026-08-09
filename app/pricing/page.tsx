@@ -19,8 +19,15 @@ const INCLUDED = [
   "Cancel anytime — access runs to the end of the paid period",
 ];
 
-export default async function PricingPage() {
+export default async function PricingPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ plan?: string }>;
+}) {
   const access = await getMemberAccess();
+  // Set when someone picked a plan, registered, and came back from their inbox.
+  const { plan } = await searchParams;
+  const initialPlan = plan === "annual" || plan === "monthly" ? plan : undefined;
 
   return (
     <main className="container pricing-shell">
@@ -52,7 +59,7 @@ export default async function PricingPage() {
             ))}
           </ul>
 
-          <PricingPlans signedIn={access.signedIn} />
+          <PricingPlans signedIn={access.signedIn} initialPlan={initialPlan} />
 
           <p className="pricing-fineprint">
             Fade The Money publishes sports information and statistics. We are not a

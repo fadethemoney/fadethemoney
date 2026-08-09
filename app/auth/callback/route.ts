@@ -2,7 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { syncSuperAdmin } from "@/lib/auth";
 import { welcomeNewUser } from "@/app/auth/actions";
-import { safeInternalPath } from "@/lib/landing";
+import { postVerifyPath, safeInternalPath } from "@/lib/landing";
+import { getMemberAccess } from "@/lib/subscription";
 
 /**
  * Landing endpoint for email links (verification + password reset). Supabase
@@ -12,7 +13,10 @@ import { safeInternalPath } from "@/lib/landing";
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
-  const next = safeInternalPath(searchParams.get("next")) ?? "/account";
+  // No `next` means a plain sign-up confirmation: a new free account is sent to
+  // /pricing to pay, rather than dead-ending on /account. The password-reset
+  // link always carries next=/reset-password, so it is unaffected.
+  const next = safeInternalPath(searchParams.get("next"));
 
   if (code) {
     const supabase = await createSupabaseServerClient();
@@ -33,7 +37,13 @@ export async function GET(request: NextRequest) {
         // welcomed_at claim, so it won't duplicate the auto-confirm send.
         await welcomeNewUser();
       }
-      return NextResponse.redirect(`${origin}${next}`);
+      if (next) return NextResponse.redirect(`${origin}${next}`);
+      const access = await getMemberAccess();
+      const dest = postVerifyPath({
+        isStaff: access.reason === "staff",
+        isMember: access.isMember,
+      });
+      return NextResponse.redirect(`${origin}${dest}`);
     }
   }
   return NextResponse.redirect(`${origin}/login?error=verify`);

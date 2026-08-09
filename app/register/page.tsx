@@ -9,7 +9,7 @@ import { AuthBanner } from "@/components/auth/AuthBanner";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { bootstrapSuperAdmin, welcomeNewUser } from "@/app/auth/actions";
 import { isValidEmail, passwordIssue, phoneIssue } from "@/lib/validation";
-import { landingPathForRole, safeInternalPath } from "@/lib/landing";
+import { postVerifyPath, safeInternalPath } from "@/lib/landing";
 
 type Form = {
   name: string;
@@ -113,7 +113,15 @@ export default function RegisterPage() {
         const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
         role = profile?.role ?? undefined;
       }
-      window.location.assign(nextPath ?? landingPathForRole(role));
+      // A brand-new signup is never a member yet, so this sends a customer to
+      // /pricing to pay — matching the confirm-email path in /auth/confirm.
+      window.location.assign(
+        nextPath ??
+          postVerifyPath({
+            isStaff: role === "admin" || role === "super_admin",
+            isMember: false,
+          }),
+      );
       return;
     }
     // Confirmation ON → verification email sent.

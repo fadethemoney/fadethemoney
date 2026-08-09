@@ -2,7 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { syncSuperAdmin } from "@/lib/auth";
 import { welcomeNewUser } from "@/app/auth/actions";
-import { safeInternalPath } from "@/lib/landing";
+import { postVerifyPath, safeInternalPath } from "@/lib/landing";
+import { getMemberAccess } from "@/lib/subscription";
 
 // The OTP types Supabase puts in the `type` query param of an email link.
 type EmailOtpType = "signup" | "invite" | "magiclink" | "recovery" | "email_change" | "email";
@@ -19,11 +20,27 @@ type EmailOtpType = "signup" | "invite" | "magiclink" | "recovery" | "email_chan
  * Supabase's email templates send the user here as:
  *   {{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=...&next=...
  */
+/**
+ * Where the freshly-verified visitor goes.
+ *
+ * An explicit `next` wins — that's the /pricing round-trip and the
+ * password-reset link. Recovery links are pinned to /reset-password even if
+ * the email template drops `next`, so a forgotten password can never be
+ * answered with a pricing page. Everyone else gets the role/membership
+ * default, which sends a new free account to /pricing to pay.
+ */
+async function destination(next: string | null, type: EmailOtpType): Promise<string> {
+  if (next) return next;
+  if (type === "recovery") return "/reset-password";
+  const access = await getMemberAccess();
+  return postVerifyPath({ isStaff: access.reason === "staff", isMember: access.isMember });
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
   const tokenHash = searchParams.get("token_hash");
   const type = searchParams.get("type") as EmailOtpType | null;
-  const next = safeInternalPath(searchParams.get("next")) ?? "/account";
+  const next = safeInternalPath(searchParams.get("next"));
 
   if (tokenHash && type) {
     const supabase = await createSupabaseServerClient();
@@ -43,7 +60,7 @@ export async function GET(request: NextRequest) {
         }
         await welcomeNewUser();
       }
-      return NextResponse.redirect(`${origin}${next}`);
+      return NextResponse.redirect(`${origin}${await destination(next, type)}`);
     }
   }
   return NextResponse.redirect(`${origin}/login?error=verify`);
