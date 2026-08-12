@@ -16,7 +16,7 @@ import {
 import { summarizeDay, todayKey } from "@/lib/calc";
 import { filterRankedAllLeagues } from "@/lib/rankings";
 import { etDateKeyOf } from "@/lib/time";
-import { notifyAdmin, sendStreakAlert } from "@/lib/mailer";
+import { notifyAdmin, sendStreakAlert, type NotifyResult } from "@/lib/mailer";
 import {
   atsWinnerOf,
   buildAtsEmails,
@@ -29,7 +29,7 @@ import {
   totalWinnerOf,
   updateCategoryStreak,
 } from "@/lib/streak";
-import type { League, LeagueStreaks } from "@/lib/types";
+import type { FetchAlertState, League, LeagueStreaks } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -44,17 +44,31 @@ async function runRefresh(opts: { hoursBack?: number; hoursForward?: number } = 
   if (!(await acquireLease(holder))) {
     return { ok: true, skipped: true, reason: "locked" as const };
   }
+  // Fetch-alert bookkeeping is deliberately the LAST store write of the tick.
+  // It shares the single store blob with the pipeline, and Blob reads are
+  // eventually consistent: written up front (as it used to be), the pipeline's
+  // own readStore → writeStore cycle can resurrect the pre-alert snapshot and
+  // undo it, which is how RECOVERED went out twice on 2026-08-11. Running it
+  // here also means a mid-pipeline crash still records the outage, and it stays
+  // inside the lease so releaseLease (warm-cache read) preserves the write.
+  const fetchErrors: LeagueFetchError[] = [];
   try {
-    return await doRefresh(opts);
+    return await doRefresh(opts, fetchErrors);
   } finally {
+    try {
+      await alertOnFetchErrors(fetchErrors);
+    } catch (e) {
+      console.warn("[refresh] fetch-alert bookkeeping failed:", (e as Error).message);
+    }
     await releaseLease(holder);
   }
 }
 
-async function doRefresh(opts: { hoursBack?: number; hoursForward?: number } = {}) {
-  const fetchErrors: LeagueFetchError[] = [];
+async function doRefresh(
+  opts: { hoursBack?: number; hoursForward?: number } = {},
+  fetchErrors: LeagueFetchError[] = [],
+) {
   const fetched = await fetchAllGames(LEAGUES, fetchErrors, opts);
-  await alertOnFetchErrors(fetchErrors);
   // College leagues: keep AP-ranked matchups only (client: "just ranked",
   // 2026-07-12). Full NCAA slates would flood the dashboard and streak emails.
   const rankedOnly = await filterRankedAllLeagues(fetched);
@@ -198,54 +212,159 @@ async function doRefresh(opts: { hoursBack?: number; hoursForward?: number } = {
   return { ok: true, count: all.length, streak: globalStreak, streaks: perLeague, fetchErrors };
 }
 
+/**
+ * Alert thresholds. Tick counts assume the 2-minute refresh cron in
+ * vercel.json; all four are env-tunable so they can be loosened without a code
+ * change.
+ */
+const FAIL_TICKS_TO_ALERT = Number(process.env.FETCH_ALERT_FAIL_TICKS) || 3; // ~6 min down
+const OK_TICKS_TO_CLEAR = Number(process.env.FETCH_ALERT_OK_TICKS) || 3; // ~6 min clean
 const ALERT_REALERT_MS = Number(process.env.FETCH_ALERT_REALERT_MS) || 6 * 3600_000;
+const REFAIL_COOLDOWN_MS = Number(process.env.FETCH_ALERT_REFAIL_COOLDOWN_MS) || 3600_000;
+
+function msSince(iso: string | null | undefined, now: number): number {
+  if (!iso) return Infinity;
+  const t = Date.parse(iso);
+  return Number.isFinite(t) ? now - t : Infinity;
+}
+
+/** notifyAdmin resolves {ok:false} on a Resend error rather than throwing; the
+ *  Resend client itself can still throw on a malformed key. Normalize both. */
+async function sendAdmin(opts: { subject: string; text: string }): Promise<NotifyResult> {
+  try {
+    return await notifyAdmin(opts);
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}
+
+/** Tolerate the pre-2026-08-12 shape ({leagues, alertedAt}) still sitting in the
+ *  production blob: read it as an incident that has already paged, so the first
+ *  clean stretch after deploy closes it out with one RECOVERED. */
+function normalizeFetchAlert(
+  raw: Partial<FetchAlertState> | null | undefined,
+): FetchAlertState | null {
+  if (!raw) return null;
+  const leagues = raw.leagues ?? [];
+  return {
+    leagues,
+    failingSince: raw.failingSince ?? raw.alertedAt ?? new Date().toISOString(),
+    failStreak: raw.failStreak ?? FAIL_TICKS_TO_ALERT,
+    okStreak: raw.okStreak ?? 0,
+    alertedAt: raw.alertedAt ?? null,
+    alertedLeagues: raw.alertedLeagues ?? leagues,
+    clearedAt: raw.clearedAt ?? null,
+  };
+}
 
 /**
  * SportsGameOdds per-league fetches are isolated (Promise.allSettled), so a
  * provider outage returns ok:true with zero games and never throws — grading
- * silently freezes with no signal. Page an admin, but only on a STATE CHANGE
- * (a new/different failing set) or after a cooldown, never every 2-min tick.
- * Dedup state is persisted (DataStore.fetchAlert) so concurrent/queued runs
- * can't spam, and we advance/clear it only after a confirmed send.
+ * silently freezes with no signal. Page an admin, but only for a failure that
+ * has survived FAIL_TICKS_TO_ALERT consecutive ticks: a single flaky tick is
+ * noise, not an outage, and paging on it is what buried the admins in
+ * FAILING/RECOVERED pairs. State is persisted (DataStore.fetchAlert) and only
+ * advanced on a CONFIRMED send, so an undeliverable alert retries next tick
+ * instead of being silently swallowed.
  */
 async function alertOnFetchErrors(errors: LeagueFetchError[]) {
   const store = await readStore();
-  const prev = store.fetchAlert ?? null;
+  const prev = normalizeFetchAlert(store.fetchAlert);
   const failing = Array.from(new Set(errors.map((e) => e.league))).sort();
-  const sig = failing.join(",");
+  const now = Date.now();
+  const nowIso = new Date(now).toISOString();
 
-  if (failing.length === 0) {
-    if (prev) {
-      try {
-        await notifyAdmin({
-          subject: "[Fade The Money] SportsGameOdds fetch RECOVERED",
-          text: `League fetches are succeeding again (was failing: ${prev.leagues.join(", ") || "?"}).`,
-        });
-        await setFetchAlert(null); // clear only after a confirmed send
-      } catch (e) {
-        console.warn("[refresh] notifyAdmin (fetch-recover) failed:", (e as Error).message);
-      }
-    }
+  if (failing.length === 0) return clearFetchAlert(prev, now, nowIso);
+
+  const sig = failing.join(",");
+  const sameSet = prev !== null && prev.leagues.join(",") === sig;
+  const next: FetchAlertState = {
+    leagues: failing,
+    failingSince: sameSet ? prev!.failingSince : nowIso,
+    failStreak: sameSet ? prev!.failStreak + 1 : 1,
+    okStreak: 0,
+    alertedAt: prev?.alertedAt ?? null,
+    alertedLeagues: prev?.alertedLeagues ?? [],
+    clearedAt: prev?.clearedAt ?? null,
+  };
+
+  // A league that drops out again within the hour of recovering is flapping,
+  // not a fresh outage. Keep counting (so a genuine one still pages once the
+  // window passes) but stay quiet. Worst case this delays a real page by
+  // REFAIL_COOLDOWN_MS; the alternative is the every-hiccup spam.
+  const cooling = msSince(next.clearedAt, now) < REFAIL_COOLDOWN_MS;
+  const alreadyPaged = next.alertedAt !== null && next.alertedLeagues.join(",") === sig;
+  const stale = msSince(next.alertedAt, now) >= ALERT_REALERT_MS;
+  const shouldSend =
+    next.failStreak >= FAIL_TICKS_TO_ALERT && !cooling && (!alreadyPaged || stale);
+
+  if (!shouldSend) {
+    await setFetchAlert(next);
     return;
   }
 
-  const prevSig = (prev?.leagues ?? []).join(",");
-  const ageMs = prev ? Date.now() - new Date(prev.alertedAt).getTime() : Infinity;
-  const shouldSend = sig !== prevSig || !Number.isFinite(ageMs) || ageMs >= ALERT_REALERT_MS;
-  if (!shouldSend) return;
-
+  const downMin = Math.max(1, Math.round(msSince(next.failingSince, now) / 60_000));
   const lines = errors.map((e) => `• ${e.league}: ${e.message}`).join("\n");
-  try {
-    await notifyAdmin({
-      subject: `[Fade The Money] SportsGameOdds fetch FAILING (${failing.join(", ")})`,
-      text:
-        `Grading is starved of data — ${failing.length} league fetch(es) failed this refresh.\n\n${lines}\n\n` +
-        `Streak emails cannot fire while this persists. Check SportsGameOdds status / API quota.`,
-    });
-    await setFetchAlert({ leagues: failing, alertedAt: new Date().toISOString() }); // advance only after send
-  } catch (e) {
-    console.warn("[refresh] notifyAdmin (fetch-fail) failed:", (e as Error).message);
+  const res = await sendAdmin({
+    subject: `[Fade The Money] SportsGameOdds fetch FAILING (${sig})`,
+    text:
+      `Grading is starved of data. ${failing.length} league fetch(es) have now failed ` +
+      `${next.failStreak} refreshes in a row (about ${downMin} min).\n\n${lines}\n\n` +
+      `Streak emails cannot fire while this persists. Check SportsGameOdds status / API quota.`,
+  });
+  if (!res.ok) {
+    if (!res.skipped) console.warn("[refresh] notifyAdmin (fetch-fail) undelivered:", res.error);
+    await setFetchAlert(next); // hold the incident open; retry on the next tick
+    return;
   }
+  await setFetchAlert({ ...next, alertedAt: nowIso, alertedLeagues: failing, clearedAt: null });
+}
+
+/** Healthy tick. Only worth an email if we actually paged about this incident
+ *  and the feed has stayed up for OK_TICKS_TO_CLEAR ticks. A failure that
+ *  cleared before it ever paged is forgotten in silence. */
+async function clearFetchAlert(prev: FetchAlertState | null, now: number, nowIso: string) {
+  if (!prev) return; // healthy with nothing tracked: no send, no write
+
+  // Post-recovery cooldown record. Nothing left to count, just let it expire.
+  if (prev.failStreak === 0) {
+    if (msSince(prev.clearedAt, now) >= REFAIL_COOLDOWN_MS) await setFetchAlert(null);
+    return;
+  }
+
+  const okStreak = prev.okStreak + 1;
+
+  if (!prev.alertedAt) {
+    // Never paged: this is the flap that used to cost a FAILING + RECOVERED pair.
+    await setFetchAlert(okStreak >= OK_TICKS_TO_CLEAR ? null : { ...prev, okStreak });
+    return;
+  }
+  if (okStreak < OK_TICKS_TO_CLEAR) {
+    await setFetchAlert({ ...prev, okStreak }); // not convinced yet, keep watching
+    return;
+  }
+
+  const downMin = Math.max(1, Math.round(msSince(prev.failingSince, now) / 60_000));
+  const res = await sendAdmin({
+    subject: "[Fade The Money] SportsGameOdds fetch RECOVERED",
+    text:
+      `League fetches are succeeding again (was failing: ${prev.leagues.join(", ") || "?"}).\n\n` +
+      `Down for about ${downMin} min; clean for the last ${okStreak} refreshes.`,
+  });
+  if (!res.ok) {
+    if (!res.skipped) console.warn("[refresh] notifyAdmin (fetch-recover) undelivered:", res.error);
+    await setFetchAlert({ ...prev, okStreak }); // retry on the next tick
+    return;
+  }
+  await setFetchAlert({
+    leagues: [],
+    failingSince: prev.failingSince,
+    failStreak: 0,
+    okStreak,
+    alertedAt: null,
+    alertedLeagues: [],
+    clearedAt: nowIso,
+  });
 }
 
 function authorize(req: Request): NextResponse | null {

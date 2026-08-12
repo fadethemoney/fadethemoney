@@ -130,13 +130,25 @@ export interface DailyRecord {
 }
 
 /**
- * Persisted state for the SportsGameOdds fetch-outage alert. We only email on a
- * STATE CHANGE (a new/different set of failing leagues) or after a cooldown, so
- * a multi-hour outage doesn't send an alert on every 2-minute cron tick.
+ * Persisted state machine for the SportsGameOdds fetch-outage alert.
+ *
+ * The first version emailed on the FIRST failing tick and cleared on the FIRST
+ * clean one. That only deduped a *sustained* outage; a league that flaps (mlb,
+ * 2026-08-11) produced a FAILING + RECOVERED pair per hiccup, to every admin,
+ * on a 2-minute cron. Now a failure must persist for FETCH_ALERT_FAIL_TICKS
+ * consecutive ticks before anyone is paged, the recovery notice needs
+ * FETCH_ALERT_OK_TICKS clean ticks AND an alert that actually went out, and a
+ * league that drops out again right after recovering is treated as flapping
+ * rather than as a new outage (see app/api/refresh/route.ts).
  */
 export interface FetchAlertState {
-  leagues: string[]; // sorted leagues failing at the last alert
-  alertedAt: string; // ISO timestamp of the last alert send
+  leagues: string[];        // sorted leagues failing on the latest failing tick
+  failingSince: string;     // ISO: first tick of the current failing run
+  failStreak: number;       // consecutive ticks this set has failed (0 = healthy)
+  okStreak: number;         // consecutive clean ticks since the last failure
+  alertedAt: string | null; // ISO of the last FAILING email; null = never paged
+  alertedLeagues: string[]; // the failing set that email named
+  clearedAt: string | null; // ISO of the last RECOVERED email (re-fail cooldown)
 }
 
 export interface DataStore {
