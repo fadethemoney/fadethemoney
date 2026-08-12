@@ -86,11 +86,26 @@ is still the right first move.)
    portal errors until its settings are saved once).
 4. **Legal review** + real business name, address, support inbox and governing
    state into `lib/legal.ts` — currently placeholders.
-5. **Client answers still open**: final price, trial length, annual price,
-   refund policy, promo codes at launch (env flag, off), Stripe Tax (env flag,
-   off), business/legal name + support email.
+5. **Client answers still open**: trial length, Stripe Tax (env flag, off),
+   registered business name, mailing address, support inbox, governing state.
 6. **Owner accounts** should be flipped to comp before launch so they keep
    access and alerts for free.
 
-Prices currently in `lib/plans.ts` are the unconfirmed defaults: $29.99/mo,
-$299/yr, 7-day trial.
+## Client answers received 2026-08-12
+
+| Question | Answer | State |
+|---|---|---|
+| Monthly price | **$50/mo** | In `lib/plans.ts`. Needs a matching live Stripe Price. |
+| Annual price | **$500/yr** (ten monthly payments, so "two months free" is literal) | In `lib/plans.ts`. Needs a matching live Stripe Price. |
+| Refunds | **None** | Already the wording in `/terms`; renewal copy now says it too. |
+| Promo codes | **None** | Already off. Leave `STRIPE_ALLOW_PROMO` unset. |
+| Business name | Answer incomplete, still needed | `lib/legal.ts` still falls back to "Fade The Money". |
+
+Trial length is still the unconfirmed 7-day default.
+
+**Price change is a two-part job.** `lib/plans.ts` is only what the customer
+reads; the amount charged is the Stripe Price behind `STRIPE_PRICE_MONTHLY` /
+`STRIPE_PRICE_ANNUAL`. Stripe Prices are immutable, so $50/$500 means creating
+NEW prices and repointing those env vars. Ship the code and the env change
+together or the page will quote one number and the card will be charged
+another.

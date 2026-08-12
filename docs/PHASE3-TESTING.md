@@ -10,8 +10,8 @@ every box here is ticked.
 ### Stripe dashboard (test mode)
 
 1. **Products → Add product** twice:
-   - *Fade The Money — Monthly*, recurring, $29.99 / month
-   - *Fade The Money — Annual*, recurring, $299 / year
+   - *Fade The Money — Monthly*, recurring, $50 / month
+   - *Fade The Money — Annual*, recurring, $500 / year
    Copy each **price id** (`price_…`).
 2. **Settings → Billing → Customer portal** → enable: cancel subscription
    (at period end), update payment method, switch plan between the two prices,

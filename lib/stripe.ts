@@ -43,7 +43,13 @@ export function priceIdFor(plan: SubscriptionPlan): string | null {
   return process.env[found.priceEnv] ?? null;
 }
 
-/** Whether to show Stripe's promo-code field at checkout (client pending). */
+/**
+ * Whether to show Stripe's promo-code field at checkout.
+ *
+ * Client confirmed 2026-08-12: NO promo codes. Unset env = off, so the correct
+ * production state is simply to leave STRIPE_ALLOW_PROMO unset. Setting it to
+ * "true" is what turns the field back on, and nothing else does.
+ */
 export function promoCodesEnabled(): boolean {
   const v = (process.env.STRIPE_ALLOW_PROMO ?? "").trim().toLowerCase();
   return v === "true" || v === "1" || v === "on";

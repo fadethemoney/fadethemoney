@@ -8,8 +8,14 @@ import type { SubscriptionPlan } from "@/lib/subscription.types";
  * env var holding that plan's Stripe price id (price_…): test ids in
  * .env.local, live ids only in Vercel.
  *
- * Amounts below are the suggested defaults the client has not yet confirmed
- * ($29.99/mo, $299/yr, 7-day trial). Confirmed numbers land here.
+ * Amounts CONFIRMED by the client 2026-08-12: $50/mo, $500/yr. The annual
+ * price is exactly ten monthly payments, so "two months free" is literal.
+ * The 7-day trial is still the unconfirmed default.
+ *
+ * These strings are only what the customer READS. The amount actually charged
+ * lives in the Stripe Price named by `priceEnv`, so changing a number here
+ * without creating a matching Stripe Price makes the page lie about the
+ * charge. Stripe Prices are immutable: a new amount means a NEW price id.
  */
 
 export const TRIAL_DAYS = 7;
@@ -34,23 +40,23 @@ export const PLANS: Plan[] = [
   {
     id: "monthly",
     name: "Monthly",
-    price: "$29.99",
-    amount: 29.99,
+    price: "$50",
+    amount: 50,
     interval: "month",
     cadence: "per month",
     note: `${TRIAL_DAYS}-day free trial`,
-    renewalTerms: `After the ${TRIAL_DAYS}-day free trial, $29.99 is charged every month until you cancel.`,
+    renewalTerms: `After the ${TRIAL_DAYS}-day free trial, $50 is charged every month until you cancel. Payments are non-refundable.`,
     priceEnv: "STRIPE_PRICE_MONTHLY",
   },
   {
     id: "annual",
     name: "Annual",
-    price: "$299",
-    amount: 299,
+    price: "$500",
+    amount: 500,
     interval: "year",
     cadence: "per year",
     note: "Two months free vs monthly",
-    renewalTerms: `After the ${TRIAL_DAYS}-day free trial, $299 is charged every year until you cancel.`,
+    renewalTerms: `After the ${TRIAL_DAYS}-day free trial, $500 is charged every year until you cancel. Payments are non-refundable.`,
     priceEnv: "STRIPE_PRICE_ANNUAL",
   },
 ];
