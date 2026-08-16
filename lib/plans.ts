@@ -10,7 +10,8 @@ import type { SubscriptionPlan } from "@/lib/subscription.types";
  *
  * Amounts CONFIRMED by the client 2026-08-12: $50/mo, $500/yr. The annual
  * price is exactly ten monthly payments, so "two months free" is literal.
- * The 7-day trial is still the unconfirmed default.
+ * Trial length CONFIRMED by the client 2026-08-16: two weeks (was an
+ * unconfirmed 7-day placeholder).
  *
  * These strings are only what the customer READS. The amount actually charged
  * lives in the Stripe Price named by `priceEnv`, so changing a number here
@@ -18,7 +19,7 @@ import type { SubscriptionPlan } from "@/lib/subscription.types";
  * charge. Stripe Prices are immutable: a new amount means a NEW price id.
  */
 
-export const TRIAL_DAYS = 7;
+export const TRIAL_DAYS = 14;
 
 export type Plan = {
   id: SubscriptionPlan;

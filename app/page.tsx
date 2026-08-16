@@ -9,6 +9,7 @@ import { LeagueFilter } from "@/components/LeagueFilter";
 import { NewsSection } from "@/components/NewsSection";
 import { getPublishedArticles } from "@/lib/articles";
 import { getMemberAccess } from "@/lib/subscription";
+import { TRIAL_DAYS } from "@/lib/plans";
 import { redactStoreForFreeTier } from "@/lib/paywall";
 import type { Game } from "@/lib/types";
 
@@ -138,7 +139,7 @@ export default async function HomePage({
             {locked ? (
               <>
                 <Link href="/pricing" className="btn-primary btn-join">
-                  Start 7-day trial
+                  Start {TRIAL_DAYS}-day trial
                 </Link>
                 <a href="#games" style={{ marginLeft: 16 }}>Scroll for live games ↓</a>
               </>
@@ -275,7 +276,7 @@ function JoinBand() {
           <li>Cancel anytime — access runs to the end of the paid period</li>
         </ul>
         <Link href="/pricing" className="btn-primary btn-join">
-          Start 7-day trial
+          Start {TRIAL_DAYS}-day trial
         </Link>
       </div>
     </section>

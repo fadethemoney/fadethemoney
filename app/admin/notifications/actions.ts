@@ -5,7 +5,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { sendTipEmail } from "@/lib/mailer";
 
 /**
- * Email an active tip to every opted-in subscriber.
+ * Email an active pick to every entitled member.
  *
  * Runs server-side with the service-role client. The send is guarded two ways:
  *  - role re-check here (UI hiding the button is only UX), and
@@ -13,7 +13,16 @@ import { sendTipEmail } from "@/lib/mailer";
  *    blasted twice, even on a double click or repeated activate/draft toggles.
  * Degrades to a best-effort single send if migration 0003 (emailed_at) hasn't
  * been applied yet, so it never hard-fails on a half-migrated project.
+ *
+ * WHO GETS IT — client instruction 2026-08-16: "only 2 weeks trials and
+ * members". Picks are the paid product, so a free sign-up must never receive
+ * one by email; that would hand away the thing the paywall is selling. The
+ * entitlement test below mirrors lib/subscription.ts and lib/alert-recipients.ts
+ * exactly, so all three surfaces agree on who counts as a member.
  */
+
+/** Statuses that still count as a member — same grace rule as the paywall. */
+const PAID_STATUSES = ["trialing", "active", "past_due"];
 
 type EmailResult =
   | { ok: true; sent: number; failed: number; recipients: number }
@@ -72,19 +81,38 @@ export async function emailTip(tipId: string): Promise<EmailResult> {
     }
   };
 
-  // Recipients: every opted-in profile.
+  // Recipients: opted-in profiles that are actually entitled — someone in the
+  // free trial, a paying member (incl. the past_due grace window), a comped
+  // account, or staff. Free sign-ups are deliberately excluded.
   const { data: subs, error: subsErr } = await admin
     .from("profiles")
-    .select("email")
+    .select("email, is_comp, role, subscription_status")
     .eq("email_opt_in", true);
   if (subsErr) {
+    // Most likely migration 0006 hasn't been run, so the subscription columns
+    // are missing. Fail CLOSED: sending to everyone would leak the paid picks
+    // to free accounts, which is exactly what this filter exists to prevent.
     await release();
-    return { ok: false, error: subsErr.message };
+    console.error("[emailTip] recipient query failed — has 0006 been run?", subsErr.message);
+    return {
+      ok: false,
+      error: "Couldn't work out who is a member, so nothing was sent. Check the subscription columns exist (migration 0006).",
+    };
   }
-  const recipients = (subs ?? []).map((r) => r.email as string).filter(Boolean);
+
+  const recipients = (subs ?? [])
+    .filter(
+      (r) =>
+        r.is_comp === true ||
+        r.role === "admin" ||
+        r.role === "super_admin" ||
+        PAID_STATUSES.includes(r.subscription_status as string),
+    )
+    .map((r) => (r.email as string)?.trim())
+    .filter(Boolean);
   if (recipients.length === 0) {
     await release();
-    return { ok: false, error: "No opted-in subscribers to email yet." };
+    return { ok: false, error: "No members or trials to email yet." };
   }
 
   const res = await sendTipEmail(recipients, {

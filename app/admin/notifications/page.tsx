@@ -167,11 +167,15 @@ export default function NotificationsPage() {
     if (error) setTips(prev); // revert
   }
 
-  // Email an active tip to all opted-in subscribers. The server action enforces
+  // Email an active pick to every member and trial. The server action enforces
   // a one-time claim, so this can't double-send even on a fast double click.
   async function emailSubscribers(t: Tip) {
     if (t.status !== "active" || t.emailed || emailingId) return;
-    if (!window.confirm("Email this tip to all opted-in subscribers? This can only be done once.")) {
+    if (
+      !window.confirm(
+        "Email this pick to everyone on a trial or a paid membership? Free sign-ups won't get it. This can only be done once.",
+      )
+    ) {
       return;
     }
     setNotice(undefined);
@@ -182,7 +186,7 @@ export default function NotificationsPage() {
       setTips((list) => list.map((x) => (x.id === t.id ? { ...x, emailed: true } : x)));
       setNotice({
         kind: "success",
-        text: `Sent to ${res.sent} subscriber${res.sent === 1 ? "" : "s"}.${res.failed ? ` ${res.failed} failed.` : ""}`,
+        text: `Sent to ${res.sent} member${res.sent === 1 ? "" : "s"}.${res.failed ? ` ${res.failed} failed.` : ""}`,
       });
     } else {
       // If it was already emailed, reflect that so the button locks too.
@@ -199,7 +203,8 @@ export default function NotificationsPage() {
         <div>
           <h1 className="admin-h1">Notifications</h1>
           <p className="admin-sub" style={{ marginBottom: 0 }}>
-            Post a tip. Active tips appear in the announcement bar at the top of the site.
+            Post a pick. Active picks appear in the announcement bar at the top of the site, and
+            “Email subscribers” sends one to every trial and paid member — never to free sign-ups.
           </p>
         </div>
         <button className="account-btn" onClick={openNew}>
