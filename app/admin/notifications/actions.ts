@@ -36,12 +36,20 @@ export async function emailTip(tipId: string): Promise<EmailResult> {
 
   // Load the tip. NOTE: don't select emailed_at here — that column may not exist
   // yet on a project that hasn't run migration 0003; the atomic claim below
-  // handles that case on its own.
-  const { data: tip, error: tipErr } = await admin
+  // handles that case on its own. image_url is tried first and dropped if
+  // migration 0007 hasn't been applied (the pick still emails, just text-only).
+  const withImage = await admin
     .from("notifications")
-    .select("id, title, team_pick, message, status")
+    .select("id, title, team_pick, message, status, image_url")
     .eq("id", tipId)
     .single();
+  const { data: tip, error: tipErr } = withImage.error
+    ? await admin
+        .from("notifications")
+        .select("id, title, team_pick, message, status")
+        .eq("id", tipId)
+        .single()
+    : withImage;
   if (tipErr || !tip) return { ok: false, error: "Tip not found." };
   if (tip.status !== "active") {
     return { ok: false, error: "Activate the tip before emailing subscribers." };
@@ -91,6 +99,7 @@ export async function emailTip(tipId: string): Promise<EmailResult> {
     title: tip.title,
     teamPick: tip.team_pick,
     message: tip.message ?? undefined,
+    imageUrl: (tip as { image_url?: string | null }).image_url ?? undefined,
   });
 
   // Hard failure (nothing delivered) → release so it can be retried.

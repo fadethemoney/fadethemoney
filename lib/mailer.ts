@@ -327,6 +327,8 @@ export interface TipEmailContent {
   title: string;
   teamPick: string;
   message?: string;
+  /** Public image URL (Vercel Blob) shown as a banner at the top of the email. */
+  imageUrl?: string;
 }
 
 export interface TipBlastResult {
@@ -371,6 +373,7 @@ export async function sendTipEmail(
   const safeTitle = escapeHtml(tip.title);
   const safePick = escapeHtml(tip.teamPick);
   const safeMessage = tip.message ? escapeHtml(tip.message).replace(/\n/g, "<br>") : "";
+  const image = safeImageUrl(tip.imageUrl);
   const text =
     `${tip.title}\n\n` +
     `Pick: ${tip.teamPick}\n` +
@@ -383,6 +386,7 @@ export async function sendTipEmail(
       <div style="background:#1B45D9;padding:18px 24px">
         <span style="color:#FFFFFF;font-size:18px;font-weight:600;letter-spacing:-0.02em">Fade The Money</span>
       </div>
+      ${image ? `<img src="${image}" alt="${safeTitle}" width="518" style="display:block;width:100%;max-width:518px;height:auto;border:0;border-bottom:1px solid #E5E3DC">` : ""}
       <div style="padding:24px">
         <div style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.08em;color:#1B45D9;text-transform:uppercase;margin:0 0 6px">New pick</div>
         <h1 style="font-size:20px;color:#1A1A1A;margin:0 0 8px">${safeTitle}</h1>
@@ -427,6 +431,17 @@ export async function sendTipEmail(
 
   console.log(`[mailer] tip "${tip.title}" → sent ${sent}, failed ${failed}`);
   return { ok: failed === 0 && sent > 0, sent, failed, error: lastError };
+}
+
+/**
+ * Only allow a plain https URL into an email `src` attribute. Guards the raw
+ * interpolation (no quotes/angle brackets can break out of the tag) and matches
+ * what mail clients will actually render — http images are blocked by most of
+ * them anyway. Anything else is dropped and the email sends without a picture.
+ */
+function safeImageUrl(url?: string): string | undefined {
+  const u = (url ?? "").trim();
+  return /^https:\/\/[^\s"'<>]+$/i.test(u) ? u : undefined;
 }
 
 function escapeHtml(s: string): string {

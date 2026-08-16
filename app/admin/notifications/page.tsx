@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { Modal } from "@/components/admin/Modal";
 import { AuthButton } from "@/components/auth/AuthButton";
 import { Field } from "@/components/auth/Field";
@@ -8,12 +8,24 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { emailTip } from "./actions";
 
 type Status = "draft" | "active";
-type Tip = { id: string; title: string; teamPick: string; message: string; status: Status; emailed: boolean };
+type Tip = {
+  id: string;
+  title: string;
+  teamPick: string;
+  message: string;
+  status: Status;
+  emailed: boolean;
+  imageUrl: string;
+};
 
-const EMPTY_FORM = { title: "", teamPick: "", message: "", status: "draft" as Status };
+const EMPTY_FORM = { title: "", teamPick: "", message: "", imageUrl: "", status: "draft" as Status };
 
-// Map a notifications DB row to the UI shape. emailed_at is optional because a
-// project that hasn't run migration 0003 yet won't have the column.
+const MIGRATION_HINT =
+  "Saved, but the picture wasn't — run supabase/migrations/0007_notification_image.sql in the Supabase SQL editor.";
+
+// Map a notifications DB row to the UI shape. emailed_at / image_url are
+// optional because a project that hasn't run migration 0003 / 0007 yet won't
+// have those columns.
 function fromRow(r: {
   id: string;
   title: string;
@@ -21,6 +33,7 @@ function fromRow(r: {
   message: string | null;
   status: Status;
   emailed_at?: string | null;
+  image_url?: string | null;
 }): Tip {
   return {
     id: r.id,
@@ -29,13 +42,30 @@ function fromRow(r: {
     message: r.message ?? "",
     status: r.status,
     emailed: !!r.emailed_at,
+    imageUrl: r.image_url ?? "",
   };
 }
 
-// Base columns that exist on every project; the email column is queried
-// separately so the page still loads before migration 0003 is applied.
+// Base columns that exist on every project; the newer columns are queried
+// together and dropped as a set so the page still loads before migrations
+// 0003 / 0007 are applied.
 const SELECT = "id, title, team_pick, message, status";
-const SELECT_EMAILED = `${SELECT}, emailed_at`;
+const SELECT_FULL = `${SELECT}, emailed_at, image_url`;
+
+// Postgres reports an unknown column as 42703; PostgREST's schema cache as
+// PGRST204. Either means the migration hasn't been run yet.
+function isMissingColumn(err: { code?: string } | null): boolean {
+  return err?.code === "42703" || err?.code === "PGRST204";
+}
+
+async function uploadImage(file: File): Promise<string> {
+  const fd = new FormData();
+  fd.append("file", file);
+  const res = await fetch("/api/admin/upload", { method: "POST", body: fd });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error ?? "Upload failed.");
+  return data.url as string;
+}
 
 export default function NotificationsPage() {
   const [supabase] = useState(() => createSupabaseBrowserClient());
@@ -48,6 +78,8 @@ export default function NotificationsPage() {
   const [busy, setBusy] = useState(false);
   const [emailingId, setEmailingId] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ kind: "success" | "error"; text: string }>();
+  const [uploading, setUploading] = useState(false);
+  const imgInputRef = useRef<HTMLInputElement>(null);
 
   // Load existing tips (admins read all via RLS; ordered newest first). Try the
   // query with emailed_at first; if that column isn't migrated yet, fall back to
@@ -56,11 +88,19 @@ export default function NotificationsPage() {
     let active = true;
     (async () => {
       let rows:
-        | { id: string; title: string; team_pick: string; message: string | null; status: Status; emailed_at?: string | null }[]
+        | {
+            id: string;
+            title: string;
+            team_pick: string;
+            message: string | null;
+            status: Status;
+            emailed_at?: string | null;
+            image_url?: string | null;
+          }[]
         | null = null;
       const withEmailed = await supabase
         .from("notifications")
-        .select(SELECT_EMAILED)
+        .select(SELECT_FULL)
         .order("created_at", { ascending: false });
       if (withEmailed.error) {
         const base = await supabase
@@ -93,9 +133,34 @@ export default function NotificationsPage() {
 
   function openEdit(tip: Tip) {
     setEditingId(tip.id);
-    setForm({ title: tip.title, teamPick: tip.teamPick, message: tip.message, status: tip.status });
+    setForm({
+      title: tip.title,
+      teamPick: tip.teamPick,
+      message: tip.message,
+      imageUrl: tip.imageUrl,
+      status: tip.status,
+    });
     setError(undefined);
     setOpen(true);
+  }
+
+  // Upload straight to Vercel Blob via the admin route the news editor uses,
+  // then keep the public URL on the form. The picture is stored on the tip and
+  // rendered at the top of the email when it goes out to subscribers.
+  async function onPickImage(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setError(undefined);
+    setUploading(true);
+    try {
+      const url = await uploadImage(file);
+      setForm((f) => ({ ...f, imageUrl: url }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Upload failed.");
+    } finally {
+      setUploading(false);
+    }
   }
 
   async function save(e: FormEvent) {
@@ -106,20 +171,27 @@ export default function NotificationsPage() {
     }
     setBusy(true);
     setError(undefined);
+    setNotice(undefined);
     const payload = {
       title: form.title.trim(),
       team_pick: form.teamPick.trim(),
       message: form.message.trim(),
       status: form.status,
     };
+    const image = form.imageUrl.trim();
+    // Written on top of the base payload, then retried without it if migration
+    // 0007 hasn't been applied — the tip still saves, just with no picture.
+    const withImage = { ...payload, image_url: image || null };
+    let imageSaved = true;
 
     if (editingId !== null) {
-      const { data, error } = await supabase
-        .from("notifications")
-        .update(payload)
-        .eq("id", editingId)
-        .select(SELECT)
-        .single();
+      const update = (body: object) =>
+        supabase.from("notifications").update(body).eq("id", editingId).select(SELECT).single();
+      let { data, error } = await update(withImage);
+      if (isMissingColumn(error)) {
+        imageSaved = false;
+        ({ data, error } = await update(payload));
+      }
       if (error || !data) {
         setError(error?.message ?? "Could not save.");
         setBusy(false);
@@ -127,26 +199,37 @@ export default function NotificationsPage() {
       }
       // Preserve the existing emailed flag (the update query doesn't return it).
       setTips((list) =>
-        list.map((t) => (t.id === editingId ? { ...fromRow(data), emailed: t.emailed } : t)),
+        list.map((t) =>
+          t.id === editingId
+            ? { ...fromRow(data), emailed: t.emailed, imageUrl: imageSaved ? image : t.imageUrl }
+            : t,
+        ),
       );
     } else {
       const {
         data: { user },
       } = await supabase.auth.getUser();
-      const { data, error } = await supabase
-        .from("notifications")
-        .insert({ ...payload, created_by: user?.id ?? null })
-        .select(SELECT)
-        .single();
+      const insert = (body: object) =>
+        supabase
+          .from("notifications")
+          .insert({ ...body, created_by: user?.id ?? null })
+          .select(SELECT)
+          .single();
+      let { data, error } = await insert(withImage);
+      if (isMissingColumn(error)) {
+        imageSaved = false;
+        ({ data, error } = await insert(payload));
+      }
       if (error || !data) {
         setError(error?.message ?? "Could not create.");
         setBusy(false);
         return;
       }
-      setTips((list) => [fromRow(data), ...list]);
+      setTips((list) => [{ ...fromRow(data), imageUrl: imageSaved ? image : "" }, ...list]);
     }
     setBusy(false);
     setOpen(false);
+    if (!imageSaved && image) setNotice({ kind: "error", text: MIGRATION_HINT });
   }
 
   async function toggleStatus(id: string) {
@@ -199,7 +282,8 @@ export default function NotificationsPage() {
         <div>
           <h1 className="admin-h1">Notifications</h1>
           <p className="admin-sub" style={{ marginBottom: 0 }}>
-            Post a tip. Active tips appear in the announcement bar at the top of the site.
+            Post a pick. Active picks appear in the announcement bar at the top of the site, and
+            “Email subscribers” sends one — picture and all — to every opted-in member.
           </p>
         </div>
         <button className="account-btn" onClick={openNew}>
@@ -229,6 +313,10 @@ export default function NotificationsPage() {
                 <span className={`tip-status ${t.status}`}>{t.status}</span>
               </div>
               {t.message ? <p className="nm-message">{t.message}</p> : null}
+              {t.imageUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img className="nm-thumb" src={t.imageUrl} alt="" />
+              ) : null}
               <div className="nm-actions">
                 <button className="nm-btn" onClick={() => openEdit(t)}>
                   Edit
@@ -290,6 +378,34 @@ export default function NotificationsPage() {
               placeholder="Why you're on this pick…"
             />
           </div>
+          <div className="field">
+            <label className="field-label">
+              Picture <span className="field-hint">(shown at the top of the email)</span>
+            </label>
+            {form.imageUrl ? (
+              <div className="cover-preview">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={form.imageUrl} alt="Pick image preview" />
+                <button
+                  type="button"
+                  className="nm-btn danger"
+                  onClick={() => setForm((f) => ({ ...f, imageUrl: "" }))}
+                >
+                  Remove
+                </button>
+              </div>
+            ) : null}
+            <input ref={imgInputRef} type="file" accept="image/*" hidden onChange={onPickImage} />
+            <button
+              type="button"
+              className="nm-btn"
+              onClick={() => imgInputRef.current?.click()}
+              disabled={uploading}
+            >
+              {uploading ? "Uploading…" : form.imageUrl ? "Replace picture" : "Upload picture"}
+            </button>
+          </div>
+
           <div className="field">
             <label className="field-label">Status</label>
             <div className="seg" role="group" aria-label="Status">
