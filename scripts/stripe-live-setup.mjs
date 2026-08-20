@@ -14,6 +14,7 @@
  * makes NEW prices; it never edits an existing one. Existing objects are reused
  * when they carry the metadata tag below, so a second run is not a duplicate.
  */
+import { readFileSync } from "node:fs";
 import Stripe from "stripe";
 
 const TAG = { app: "fadethemoney" };
@@ -48,6 +49,24 @@ const live = key.startsWith("sk_live");
 const step = (s) => console.log("\n" + s);
 const made = {};
 
+// The failure this guards against: lib/plans.ts is what the pricing page
+// SAYS, the Stripe price is what the card is CHARGED. They drifted apart
+// once already ($50 shown, $29.99 charged). Never create prices that
+// disagree with the page.
+const planSrc = readFileSync("lib/plans.ts", "utf8");
+for (const p of PRICES) {
+  const id = p.interval === "month" ? "monthly" : "annual";
+  const m = planSrc.match(new RegExp(`id:\\s*"${id}"[\\s\\S]*?amount:\\s*(\\d+)`));
+  const shown = m ? Number(m[1]) * 100 : null;
+  if (shown !== p.amount) {
+    console.error(
+      `ABORT: lib/plans.ts shows $${shown / 100}/${p.interval} but this script would create $${p.amount / 100}. ` +
+        `Fix one of them before creating a price — Stripe prices cannot be edited afterwards.`,
+    );
+    process.exit(1);
+  }
+}
+
 // ---------------------------------------------------------------- account
 const acct = await stripe.accounts.retrieve();
 const bp = acct.business_profile ?? {};
@@ -59,6 +78,26 @@ console.log(`  website      : ${bp.url ?? "-"}`);
 console.log(`  charges/payouts: ${acct.charges_enabled} / ${acct.payouts_enabled}   details_submitted: ${acct.details_submitted}`);
 if (live && !acct.charges_enabled) console.log("  !! charges are NOT enabled - activation is incomplete");
 if (!apply) console.log("\nDRY RUN - nothing will be created. Re-run with --apply.");
+
+// ------------------------------------------------------- payment methods
+// Read-only: this is a dashboard toggle, but silently missing Google Pay is
+// exactly the kind of thing that only shows up in a customer complaint.
+step("Payment methods");
+try {
+  const cfgs = await stripe.paymentMethodConfigurations.list({ limit: 5 });
+  const c = cfgs.data.find((x) => x.is_default) ?? cfgs.data[0];
+  if (c) {
+    const on = (k) => (c[k]?.display_preference?.value === "off" ? "OFF" : "on");
+    console.log(`  card ${on("card")} / apple_pay ${on("apple_pay")} / google_pay ${on("google_pay")} / link ${on("link")}`);
+    if (c.google_pay?.display_preference?.value === "off") {
+      console.log("  !! Google Pay is OFF — the client plan promises it. Dashboard toggle.");
+    }
+  } else {
+    console.log("  no payment method configuration found");
+  }
+} catch (err) {
+  console.log(`  could not read payment methods: ${err.message}`);
+}
 
 // ---------------------------------------------------------------- product
 step("Product");
@@ -168,10 +207,11 @@ if (apply && product) {
 
 // ---------------------------------------------------------------- output
 if (apply) {
-  step("Paste into Vercel -> Production, then redeploy. All five together:");
+  step("Paste into Vercel -> Production, then redeploy. All FOUR together:");
   console.log(`STRIPE_SECRET_KEY=${key.slice(0, 12)}...            (the key you passed)`);
-  console.log(`NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_${live ? "live" : "test"}_...   (from the dashboard)`);
   for (const [k, v] of Object.entries(made)) console.log(`${k}=${v}`);
+  console.log("(NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY is NOT used — checkout is a server-side");
+  console.log(" redirect to session.url and there is no @stripe/stripe-js in the bundle.)");
   if (!made.STRIPE_WEBHOOK_SECRET) {
     console.log("STRIPE_WEBHOOK_SECRET=whsec_...        (endpoint already existed - Reveal it in the dashboard)");
   }

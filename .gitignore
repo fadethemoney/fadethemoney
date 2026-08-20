@@ -15,3 +15,6 @@ data/sbd-samples/
 Thumbs.db
 .idea
 .vscode
+
+# live Stripe key, handed over locally - never commit
+.env.live
