@@ -8,14 +8,18 @@ import { AuthButton } from "@/components/auth/AuthButton";
 import { AuthBanner } from "@/components/auth/AuthBanner";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { bootstrapSuperAdmin, welcomeNewUser } from "@/app/auth/actions";
-import { isValidEmail, passwordIssue, phoneIssue } from "@/lib/validation";
+import { isValidEmail, passwordIssue } from "@/lib/validation";
 import { postVerifyPath, safeInternalPath } from "@/lib/landing";
 
+/**
+ * Signup asks for the three things an account cannot exist without. Phone and
+ * address used to be here too, but Stripe collects billing details on its own
+ * page, so all they did was lengthen a form most people fill in on a phone.
+ * Both are still editable on /account, and the columns still exist.
+ */
 type Form = {
   name: string;
   email: string;
-  phone: string;
-  address: string;
   password: string;
   confirm: string;
 };
@@ -24,8 +28,6 @@ export default function RegisterPage() {
   const [form, setForm] = useState<Form>({
     name: "",
     email: "",
-    phone: "",
-    address: "",
     password: "",
     confirm: "",
   });
@@ -44,9 +46,6 @@ export default function RegisterPage() {
     const next: Partial<Record<keyof Form, string>> = {};
     if (!form.name.trim()) next.name = "Enter your name.";
     if (!isValidEmail(form.email)) next.email = "Enter a valid email.";
-    const phone = phoneIssue(form.phone);
-    if (phone) next.phone = phone;
-    if (!form.address.trim()) next.address = "Enter your address.";
     const pw = passwordIssue(form.password);
     if (pw) next.password = pw;
     if (form.confirm !== form.password) next.confirm = "Passwords don't match.";
@@ -72,11 +71,7 @@ export default function RegisterPage() {
       email: form.email,
       password: form.password,
       options: {
-        data: {
-          name: form.name.trim(),
-          phone: form.phone.trim(),
-          address: form.address.trim(),
-        },
+        data: { name: form.name.trim() },
         // Point at the token_hash route, not the PKCE one: the link has to
         // work when it's opened in a webmail tab or a link scanner rather
         // than the browser that started signup. The `?next=` is always
@@ -190,26 +185,6 @@ export default function RegisterPage() {
           placeholder="you@example.com"
           autoComplete="email"
           error={errors.email}
-        />
-        <Field
-          label="Phone number"
-          name="phone"
-          type="tel"
-          inputMode="tel"
-          value={form.phone}
-          onChange={update("phone")}
-          placeholder="(555) 123-4567"
-          autoComplete="tel"
-          error={errors.phone}
-        />
-        <Field
-          label="Address"
-          name="address"
-          value={form.address}
-          onChange={update("address")}
-          placeholder="123 Main St, City, State ZIP"
-          autoComplete="street-address"
-          error={errors.address}
         />
         <Field
           label="Password"
