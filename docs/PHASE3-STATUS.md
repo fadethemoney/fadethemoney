@@ -1,9 +1,15 @@
-# Phase 3 — status as of 2026-08-03
+# Phase 3 — status as of 2026-08-20
 
-**All 10 milestones are built and on `main`** (commits `6c80030` → `3e9b4fe`).
-The live site behaves exactly as it did before, because the paywall only
-switches on when `PAYWALL_ENABLED=true` exists in the environment — and it is
-deliberately not set in Vercel yet.
+**Built, deployed, and the paywall is ON at https://fadethemoney.com.** What is
+NOT done is taking real money: production still runs Stripe **sandbox** keys, so
+every "payment" so far has been play money.
+
+Live site verified 2026-08-20: `/pricing` shows $50/month, $500/year,
+"Start 14-day trial", and the non-refundable consent wording. Code and site
+agree, and `main` builds clean.
+
+**The one remaining gate is the live key swap.** See "Go-live — what is left"
+at the bottom of this doc.
 
 Companion doc: `docs/PHASE3-TESTING.md` (setup + the 13-scenario test pass).
 
@@ -20,7 +26,7 @@ Companion doc: `docs/PHASE3-TESTING.md` (setup + the 13-scenario test pass).
 | 5 | Billing protection | Built | `app/api/stripe/webhook/`, `app/api/cron/reconcile/`, `lib/stripe-sync.ts` |
 | 6 | Admin | Built | `app/admin/members/` |
 | 7 | Legal pages | Built (needs lawyer) | `app/terms/`, `app/privacy/`, `app/disclaimer/`, `lib/legal.ts` |
-| 8 | Full test pass | Blocked on Stripe test keys | `docs/PHASE3-TESTING.md` |
+| 8 | Full test pass | Scenarios 3.1–3.4 pass in sandbox; 3.5–3.13 deferred by Robert 2026-08-10 | `docs/PHASE3-TESTING.md` |
 
 ---
 
@@ -58,38 +64,59 @@ the alert emails. Don't oversell the lock as cryptographic.
 
 ## To check the work
 
-**Already live** (paywall off, so the dashboard looks unchanged):
-`/pricing`, `/terms`, `/privacy`, `/disclaimer`, `/welcome`.
-`/account` and `/admin/members` show their new sections only after migration
-0006 runs — before that they hide themselves rather than break.
-
-**To see the paywall itself**, in this order:
-
-1. Run `supabase/migrations/0006_subscriptions.sql` in the Supabase SQL editor
-2. Set `PAYWALL_ENABLED=true` in Vercel → redeploy
-3. Visit the dashboard in a logged-out/private window — picks locked, join
-   prompts visible. Admin accounts still see everything.
-4. Remove the variable and redeploy to revert.
-
-Do step 1 before step 2. (An earlier version of the fallback would have locked
-admins out if the columns were missing; fixed in `3e9b4fe`, but the migration
-is still the right first move.)
+Everything is live. Migration 0006 was applied 2026-08-04 and
+`PAYWALL_ENABLED=true` has been set in Vercel since 2026-08-06, so a
+logged-out visit to https://fadethemoney.com already shows the locked
+dashboard and the join prompts. Removing that variable and redeploying
+reverts the whole paywall.
 
 ---
 
-## Blocked / needs a decision
+## Go-live — what is left
 
-1. **Stripe test keys** (`sk_test`, `pk_test`, `whsec`) → `.env.local`. Blocks
-   the whole test pass.
-2. **Run migration 0006** — nothing yet confirms it has been applied.
-3. **Create the two Stripe prices** and save the Customer Portal config (the
-   portal errors until its settings are saved once).
-4. **Legal review** + real business name, address, support inbox and governing
-   state into `lib/legal.ts` — currently placeholders.
-5. **Client answers still open**: trial length, Stripe Tax (env flag, off),
-   registered business name, mailing address, support inbox, governing state.
-6. **Owner accounts** should be flipped to comp before launch so they keep
-   access and alerts for free.
+Production runs **sandbox** Stripe keys, so nothing has ever charged a real
+card. Closing that is the whole remaining job.
+
+**Decided 2026-08-20:** launch on the client's existing live account
+`acct_1S3ykhCH7wkxF1QU` ("Doctor auto glass"). No second Stripe account, no
+rename, legal entity untouched — its default payout bank is already the
+client's own. Consequence accepted knowingly: an account registered to one
+business selling a second business's product is the classic Stripe freeze
+pattern, and a freeze there also freezes the auto-glass side. Two mitigations
+are therefore not optional — put the statement descriptor on the PRODUCT
+rather than the account, and send Stripe support a written notice that the
+account now also sells sports-information subscriptions.
+
+1. **Live keys.** `sk_live_…` into a gitignored `.env.live`. The publishable
+   key is NOT needed — nothing imports `@stripe/stripe-js`; checkout is a
+   server-side redirect to `session.url`.
+2. **Run `scripts/stripe-live-setup.mjs --key … --apply`.** One pass creates
+   the product (descriptor `FADETHEMONEY.COM`), the $50/mo and $500/yr prices,
+   the 5-event webhook, and a portal config that actually lists products so
+   plan-switching has something to switch to. It refuses to create a price
+   that disagrees with `lib/plans.ts`, and prints the webhook secret — which
+   Stripe returns only once, at creation.
+3. **Swap four env vars in Vercel Production** and redeploy, together:
+   `STRIPE_SECRET_KEY`, `STRIPE_PRICE_MONTHLY`, `STRIPE_PRICE_ANNUAL`,
+   `STRIPE_WEBHOOK_SECRET`. Half-swapped is a broken checkout.
+4. **Three dashboard settings the API cannot reach:** turn Google Pay ON
+   (confirmed off), set failed-payment handling to *mark unpaid* not *cancel*
+   (`lib/stripe-sync.ts` maps unpaid→paused/recoverable, canceled→dead), and
+   turn on the trial-ending reminder email.
+5. **Clear the two profiles holding sandbox customer ids** —
+   `rakesh@nibbleedge.com.au` (active) and `sbryann16@gmail.com` (canceled).
+   Once the keys are live those customers do not exist, and the nightly
+   reconcile will silently mark the active one canceled. Comp them or reset
+   them to `none`; do it deliberately rather than overnight.
+6. **Legal review** + real business name, address, support inbox and governing
+   state into `lib/legal.ts` — still placeholders, and they print on the pages
+   customers accept at checkout. This is the one item that genuinely blocks
+   charging a stranger.
+
+**The real-card test.** A 14-day trial means checkout captures nothing on day
+one, so proving the money path takes two steps: complete checkout with a real
+card, then *End trial now* on the subscription to force the first $50 invoice.
+Refund afterwards — Stripe returns the $50 but keeps the ~$1.75 fee.
 
 ## Client answers received 2026-08-12
 
@@ -101,7 +128,7 @@ is still the right first move.)
 | Promo codes | **None** | Already off. Leave `STRIPE_ALLOW_PROMO` unset. |
 | Business name | Answer incomplete, still needed | `lib/legal.ts` still falls back to "Fade The Money". |
 
-Trial length is still the unconfirmed 7-day default.
+Trial length **confirmed 2026-08-16: two weeks.** `TRIAL_DAYS = 14`.
 
 **Price change is a two-part job.** `lib/plans.ts` is only what the customer
 reads; the amount charged is the Stripe Price behind `STRIPE_PRICE_MONTHLY` /
