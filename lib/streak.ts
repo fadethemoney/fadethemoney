@@ -186,9 +186,9 @@ export function moneylineWinnerOf(g: Game): MoneylineWinner | null {
  * pulled in.
  *
  * `prev.lastNotifiedCount` is preserved so each milestone still emails exactly
- * once. When the streak shrinks or flips side (a correction, or the first run
- * under this logic) lastNotifiedCount is pinned to the new count so a now-shorter
- * streak is never re-emailed.
+ * once. When a re-grade shrinks or flips a streak, lastNotifiedCount is pinned to
+ * the new count so a now-shorter streak is never re-emailed — but a side change
+ * driven by NEW games is a real new streak and keeps its milestones (see below).
  */
 export function updateCategoryStreak<W extends string>(
   prev: CategoryStreak<W>,
@@ -233,10 +233,31 @@ export function updateCategoryStreak<W extends string>(
     .slice(0, 50)
     .map(({ g, w }) => ({ date: `${etDateKeyOf(g.startTime)}:${g.id}`, winner: w }));
 
+  // How much of this run had we ALREADY counted last tick? The distinction
+  // matters when the streak changes side. A run built from games we have never
+  // counted is genuinely new and still owes its milestone emails — that is the
+  // ordinary case of a streak ending and the other side starting one, and it
+  // happens in a single tick whenever two games finish together (an MLB slate
+  // that starts at the same minute, an NFL 1pm window). A run built from the
+  // SAME games we already counted is a re-grade that flipped the verdict; it
+  // has already had its say, buildCorrectionEmail covers it, and re-notifying
+  // would push a correction back out dressed as fresh news.
+  const prevIds = new Set(prev.history.map((h) => streakHistoryGameId(h.date)));
+  const carried = history.filter((h) => prevIds.has(streakHistoryGameId(h.date))).length;
+  // Any overlap at all means a re-grade is in play, so stay pinned (silent) and
+  // let buildCorrectionEmail speak instead. Only a run made ENTIRELY of games we
+  // have never counted resets the milestone counter.
+  // Nothing has ever been graded in this category, so `count` here is a backlog
+  // recomputed from the store, not news. Pin it so a fresh store (or a newly
+  // added category) can't blast historical milestones on its first tick.
+  const neverGraded = prev.current === null && prev.history.length === 0;
+
   const lastNotifiedCount =
     current !== null && current === prev.current
       ? Math.min(prev.lastNotifiedCount, count)
-      : count;
+      : neverGraded || carried > 0
+        ? count
+        : 0;
 
   return { current, count, lastNotifiedCount, history };
 }
