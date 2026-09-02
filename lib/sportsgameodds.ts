@@ -132,19 +132,63 @@ async function fetchPage(
   return (await res.json()) as ApiResponse;
 }
 
-async function fetchEvents(params: URLSearchParams, max = 500): Promise<ApiEvent[]> {
-  const events: ApiEvent[] = [];
+/**
+ * The six odds we actually read (see findOdd/trendFromOdds): game-period
+ * points spread, moneyline and total for each side.
+ *
+ * Passing these as `oddIDs` is the difference between a request we can afford
+ * and one that kills the function. A full MLB event carries ~1,170 odds — every
+ * market, period and player prop, each with a per-bookmaker breakdown — about
+ * 2.2 MB per event, so one 100-event page is ~200 MB of JSON. Seven leagues
+ * fetched concurrently is what OOM-killed /api/refresh on roughly half its runs.
+ * Filtered, an event is ~66 KB: a 32x cut, with the six odds we read returned
+ * byte-identical (verified against unfiltered payloads for MLB, NFL and NCAAF).
+ *
+ * Caveat: the API omits events that carry NONE of these odds. In season that is
+ * only D-II/D-III college filler (MLB and NFL had zero such events; the seven in
+ * NCAAF were Lock Haven, Erskine, Johnson C. Smith and the like), which the AP
+ * Top 25 filter discards anyway.
+ */
+const ODD_IDS = [
+  "points-home-game-sp-home",
+  "points-away-game-sp-away",
+  "points-home-game-ml-home",
+  "points-away-game-ml-away",
+  "points-all-game-ou-over",
+  "points-all-game-ou-under",
+].join(",");
+
+/**
+ * Page through events, converting each page to its final shape and dropping the
+ * raw page before requesting the next. Accumulating raw ApiEvents across pages
+ * (as this used to) held an entire slate of fully-populated events in memory at
+ * once; mapping per page keeps only the small Game objects.
+ */
+async function fetchEventPages<T>(
+  params: URLSearchParams,
+  map: (ev: ApiEvent) => T | null,
+  max = 500,
+): Promise<T[]> {
+  const out: T[] = [];
   let cursor: string | null = null;
   let pages = 0;
+  let seen = 0;
   do {
     const p = new URLSearchParams(params);
     if (cursor) p.set("cursor", cursor);
     const json = await fetchPage(p);
-    if (Array.isArray(json.data)) events.push(...json.data);
+    const data = Array.isArray(json.data) ? json.data : [];
+    seen += data.length;
+    for (const ev of data) {
+      const mapped = map(ev);
+      if (mapped) out.push(mapped);
+    }
     cursor = json.nextCursor ?? null;
     pages += 1;
-  } while (cursor && events.length < max && pages < 10);
-  return events;
+    // `json` falls out of scope here, so the raw page is collectable before the
+    // next one is fetched.
+  } while (cursor && seen < max && pages < 10);
+  return out;
 }
 
 function pickStatus(s: ApiEvent["status"]): GameStatus {
@@ -349,15 +393,10 @@ export async function fetchLeagueGames(
     startsAfter,
     startsBefore,
     limit: "100",
+    oddIDs: ODD_IDS,
   });
 
-  const events = await fetchEvents(params);
-  const games: Game[] = [];
-  for (const ev of events) {
-    const g = toGame(ev, league);
-    if (g) games.push(g);
-  }
-  return games;
+  return fetchEventPages(params, (ev) => toGame(ev, league));
 }
 
 /**
@@ -460,14 +499,13 @@ export async function fetchLeagueGamesHistorical(
     startsAfter,
     startsBefore,
     limit: "100",
+    // Same trim as the live fetch. Backfill walks up to 1000 events over a wide
+    // date range, so it is the most memory-hungry caller of the two; the opening
+    // line openingTrendFromOdds reads (openBookSpread etc.) lives on these same
+    // six odds, and an event carrying none of them can't be graded anyway.
+    oddIDs: ODD_IDS,
   });
-  const events = await fetchEvents(params, 1000);
-  const games: Game[] = [];
-  for (const ev of events) {
-    const g = toHistoricalGame(ev, league);
-    if (g) games.push(g);
-  }
-  return games;
+  return fetchEventPages(params, (ev) => toHistoricalGame(ev, league), 1000);
 }
 
 export interface LeagueFetchError {
