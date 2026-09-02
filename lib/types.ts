@@ -65,11 +65,27 @@ export interface Game {
   confirmedFinal?: boolean;
   /**
    * True when the odds feed reports the game's results as FINALIZED (official),
-   * not merely "completed". A game can be flagged completed while its box score
-   * is still settling, so we only lock/grade a score once it's finalized. Set
-   * from status.finalized in lib/sportsgameodds.ts.
+   * not merely "completed". Useful as a fast path, but NOT something grading can
+   * wait on: the feed sets it 1-4 hours after the last out, staggered per game.
+   * Set from status.finalized in lib/sportsgameodds.ts.
    */
   finalized?: boolean;
+  /**
+   * True when every period of the game has actually ended (feed reports
+   * ended + not live + whole-game markers in periods.ended). This lands the
+   * moment the game is over, so it — not `finalized` — is what lets a final be
+   * confirmed and graded promptly. See periodsComplete in lib/sportsgameodds.ts.
+   */
+  periodsComplete?: boolean;
+  /**
+   * When we FIRST saw this game reported final with the score it currently
+   * shows, ISO. Reset whenever the score moves, so it measures how long the box
+   * score has been settled rather than how long the game has read "Final".
+   * Set in upsertGames (lib/storage.ts).
+   */
+  finalSince?: string;
+  /** Score ("away-home") observed at finalSince, so a moving box score resets it. */
+  finalScoreKey?: string;
   finalResult?: {
     // "tie" = a genuine draw (only the NFL regular season can tie). Kept as its
     // own value so a tie is NOT silently collapsed into an "away" win — the

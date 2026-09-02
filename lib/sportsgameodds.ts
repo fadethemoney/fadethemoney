@@ -49,6 +49,8 @@ interface ApiEvent {
     live?: boolean;
     completed?: boolean;
     finalized?: boolean;
+    ended?: boolean;
+    periods?: { started?: string[]; ended?: string[] };
     cancelled?: boolean;
     periodID?: string;
     displayShort?: string;
@@ -154,6 +156,28 @@ function pickStatus(s: ApiEvent["status"]): GameStatus {
 
 function pickPeriod(s: ApiEvent["status"]): string | undefined {
   return s?.displayShort || s?.displayLong || undefined;
+}
+
+/**
+ * Has every period of this game actually finished?
+ *
+ * The feed sets `finalized` (results official) hours after a game ends, and
+ * grading used to wait on it — which is why a 9:20pm final only alerted at
+ * 11:00pm. This is the signal we can trust immediately instead: a genuinely
+ * finished game reports ended + not-live + a `periods.ended` list containing
+ * the whole-game markers, whereas a game the feed has merely flagged
+ * "completed" mid-play (the LAD 2-1 / real 12-3 bug) is still live:true with
+ * only the innings so far in periods.ended.
+ *
+ *   live, 9th inning → ended:false live:true  periods.ended [1i…8i]
+ *   real final       → ended:true  live:false periods.ended [1i…9i, game, reg]
+ */
+function periodsComplete(s: ApiEvent["status"]): boolean {
+  if (!s) return false;
+  if (s.live === true) return false;
+  if (s.ended !== true) return false;
+  const ended = s.periods?.ended ?? [];
+  return ended.includes("game") || ended.includes("reg");
 }
 
 function teamFrom(t: ApiTeam | undefined, fallback: string): Team {
@@ -293,6 +317,7 @@ function toGame(ev: ApiEvent, league: League): Game | null {
     away,
     trend: trendFromOdds(ev),
     finalized: ev.status?.finalized === true,
+    periodsComplete: periodsComplete(ev.status),
     updatedAt: new Date().toISOString(),
   };
 }
@@ -412,6 +437,7 @@ function toHistoricalGame(ev: ApiEvent, league: League): Game | null {
     away,
     trend,
     finalized: ev.status?.finalized === true,
+    periodsComplete: periodsComplete(ev.status),
     updatedAt: new Date().toISOString(),
   };
 }

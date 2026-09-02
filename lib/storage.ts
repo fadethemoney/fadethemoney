@@ -112,6 +112,13 @@ export async function writeStore(store: DataStore): Promise<void> {
   setCache(store); // keep cache warm with what we just wrote
 }
 
+/**
+ * How long a final's box score must hold still before we grade it. Two 2-minute
+ * cron ticks clear this comfortably, so an alert lands ~4 minutes after the last
+ * out. Env-tunable if the feed ever needs a longer settle window.
+ */
+const FINAL_SETTLE_MS = Number(process.env.FINAL_SETTLE_MS) || 90_000;
+
 export async function upsertGames(incoming: Game[]): Promise<DataStore> {
   const store = await readStoreFresh();
   const incomingIds = new Set(incoming.map((g) => g.id));
@@ -146,19 +153,50 @@ export async function upsertGames(incoming: Game[]): Promise<DataStore> {
     const started = Number.isFinite(startMs) && startMs <= now;
     let lockedTrend = existing?.trend ?? g.trend;
     if (started && !existing?.trend) lockedTrend = undefined;
-    // Confirm a final only once the feed reports it FINALIZED (results official)
-    // AND we've carried it as final across two refreshes. "completed" alone is
-    // not enough — the feed can flag a game complete while its box score still
-    // shows an in-progress number (the NYY@BOS 4-2 / real 3-6 bug), and that
-    // stale score then freezes into a streak. Requiring finalized means we only
-    // grade against the settled, official score. The score still updates every
-    // tick (incoming `g` wins below), so a late correction is re-graded — see
-    // updateCategoryStreak in lib/streak.ts.
+    // Confirm a final once its box score has SETTLED, so streaks (and the
+    // member alerts they fire) grade within minutes of the last out.
+    //
+    // This used to wait on the feed's `finalized` flag, but that flag lands
+    // 1-4 hours after a game ends and is staggered game by game — a 9:20pm
+    // final alerted at 11:00pm. What we can trust immediately is
+    // `periodsComplete` (every period ended, game no longer live) plus the
+    // score holding still: the failure this guards against — the feed flagging
+    // a game complete while the box score shows a mid-game number (the
+    // NYY@BOS 4-2 / real 3-6 bug) — is exactly a game that is still live with
+    // a moving score, and it fails both tests.
+    //
+    // So a final is confirmed when it has been reported final with an
+    // UNCHANGED score across at least two refreshes AND for at least
+    // FINAL_SETTLE_MS, or (fast path) the feed has already finalized it.
+    // Confirmation is sticky: once graded, a later flag flip can't drop the
+    // game back out of a running streak. A genuinely corrected score is still
+    // re-graded every tick — see updateCategoryStreak in lib/streak.ts.
+    const isFinal = g.status === "final";
+    const scoreKey = `${g.away.score ?? "?"}-${g.home.score ?? "?"}`;
+    const heldScore = Boolean(existing?.finalSince && existing?.finalScoreKey === scoreKey);
+    const finalSince = isFinal
+      ? heldScore
+        ? existing!.finalSince
+        : new Date(now).toISOString()
+      : undefined;
+    const settledMs = finalSince ? now - new Date(finalSince).getTime() : 0;
+    const settled =
+      isFinal &&
+      g.periodsComplete === true &&
+      existing?.status === "final" &&
+      heldScore &&
+      settledMs >= FINAL_SETTLE_MS;
     const confirmedFinal =
-      g.status === "final" && g.finalized === true
-        ? existing?.confirmedFinal === true || existing?.status === "final"
-        : false;
-    map.set(g.id, { ...existing, ...g, trend: lockedTrend, confirmedFinal });
+      existing?.confirmedFinal === true ||
+      (isFinal && (settled || (g.finalized === true && existing?.status === "final")));
+    map.set(g.id, {
+      ...existing,
+      ...g,
+      trend: lockedTrend,
+      confirmedFinal,
+      finalSince,
+      finalScoreKey: isFinal ? scoreKey : undefined,
+    });
   }
   store.games = Array.from(map.values()).sort(
     (a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime(),
