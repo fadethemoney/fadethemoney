@@ -170,6 +170,20 @@ async function doRefresh(
     // failure holds the milestone open for the next tick; "skipped" (no mail
     // provider, or nobody subscribed to this league) does not — there is
     // nothing to retry, so the streak moves on.
+    //
+    // Each send is persisted the moment it lands, NOT once at the end of the
+    // league loop. A tick that mailed and then died before the closing
+    // setLeagueStreaks left lastNotifiedCount un-advanced, so the next tick
+    // rebuilt the same milestone and mailed it again — which is how the
+    // identical MLB PUBLIC 2-total alert went to all five members twice, at
+    // 05:08 and 05:10 UTC on 2026-09-08. Persisting per send narrows that
+    // window from the whole tick (7 leagues, every send in it) to a single
+    // Blob write. `perLeague` is seeded from store.streaks, so writing it
+    // mid-loop still carries every league we haven't reached yet.
+    const persistSends = async () => {
+      perLeague[league] = ls;
+      await setLeagueStreaks(perLeague);
+    };
     for (const email of buildAtsEmails(league, ls.ats, gameById, nextGame)) {
       let res;
       try {
@@ -183,6 +197,7 @@ async function doRefresh(
         break;
       }
       ls.ats = { ...ls.ats, lastNotifiedCount: email.newLastNotifiedCount };
+      await persistSends();
     }
     for (const email of buildTotalEmails(league, ls.total, gameById, nextGame)) {
       let res;
@@ -197,6 +212,7 @@ async function doRefresh(
         break;
       }
       ls.total = { ...ls.total, lastNotifiedCount: email.newLastNotifiedCount };
+      await persistSends();
     }
     // Moneyline streak EMAILS disabled 2026-06-22 at the client's request. We
     // still advance lastNotifiedCount so the on-site moneyline streak keeps
