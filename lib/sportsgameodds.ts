@@ -215,13 +215,21 @@ function pickPeriod(s: ApiEvent["status"]): string | undefined {
  *
  *   live, 9th inning → ended:false live:true  periods.ended [1i…8i]
  *   real final       → ended:true  live:false periods.ended [1i…9i, game, reg]
+ *
+ * Only "game" counts. "reg" means REGULATION is over, which in a game headed to
+ * extras lands while it is still being played — so accepting it graded ARI @ KC
+ * (5-4, 10 innings) as a finished VEGAS win and emailed members 3.5 minutes
+ * before the final out on 2026-09-07. An extra-innings game carries the markers
+ * separately, [1i…9i, game, ot, reg], and only "game" waits for the real end.
+ * Dropping the fallback costs nothing: across 134 finals sampled from MLB, NFL,
+ * WNBA and NCAAF, every single one carried "game" and not one was reg-only.
  */
 function periodsComplete(s: ApiEvent["status"]): boolean {
   if (!s) return false;
   if (s.live === true) return false;
   if (s.ended !== true) return false;
   const ended = s.periods?.ended ?? [];
-  return ended.includes("game") || ended.includes("reg");
+  return ended.includes("game");
 }
 
 function teamFrom(t: ApiTeam | undefined, fallback: string): Team {
