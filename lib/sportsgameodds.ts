@@ -232,6 +232,18 @@ function periodsComplete(s: ApiEvent["status"]): boolean {
   return ended.includes("game");
 }
 
+/**
+ * `name` is what the alert emails print ("Giants @ Braves") — the client chose
+ * abbreviated team names over codes and over full names on 2026-09-05. The
+ * medium-then-long order is what makes that work in both worlds: the pro leagues
+ * always carry `names.medium` ("Brewers"), while college teams usually carry only
+ * `names.long`, which for them is the bare school ("Rutgers", "UMass") rather than
+ * a mascot-laden full name. Don't reorder these without re-checking college.
+ *
+ * `abbr` has no such luck: only ~19% of NCAAF teams have a code at all, so most
+ * fall through to the literal "HOME"/"AWAY" fallback. That's fine on the dashboard,
+ * which shows the name beside it, but it is why emails must not use abbr.
+ */
 function teamFrom(t: ApiTeam | undefined, fallback: string): Team {
   const id = t?.teamID ?? fallback;
   const abbr = (t?.abbreviation || t?.names?.short || t?.shortName || fallback)

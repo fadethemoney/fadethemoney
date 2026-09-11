@@ -281,7 +281,7 @@ function buildLines<W extends string>(
     const id = h.date.split(":").slice(1).join(":");
     const g = gamesById.get(id);
     if (!g) return `• (game ${id})`;
-    const matchup = `${g.away.abbr} @ ${g.home.abbr}`;
+    const matchup = `${g.away.name} @ ${g.home.name}`;
     if (category === "ats") {
       const favSide = g.trend?.pickedSide;
       const fav = favSide === "home" ? g.home : favSide === "away" ? g.away : null;
@@ -293,7 +293,7 @@ function buildLines<W extends string>(
             : -homeSpread
           : null;
       const publicLabel = fav
-        ? `Public: ${fav.abbr}${favSpread !== null ? ` ${favSpread > 0 ? "+" : ""}${favSpread}` : ""}`
+        ? `Public: ${fav.name}${favSpread !== null ? ` ${favSpread > 0 ? "+" : ""}${favSpread}` : ""}`
         : "Public: —";
       const score =
         typeof g.home.score === "number" && typeof g.away.score === "number"
@@ -310,7 +310,7 @@ function buildLines<W extends string>(
       const favOdds =
         favSide === "home" ? g.trend?.mlOddsHome : favSide === "away" ? g.trend?.mlOddsAway : null;
       const publicLabel = fav
-        ? `Public: ${fav.abbr} ML${favOdds ? ` (${favOdds})` : ""}`
+        ? `Public: ${fav.name} ML${favOdds ? ` (${favOdds})` : ""}`
         : "Public: —";
       const score =
         typeof g.home.score === "number" && typeof g.away.score === "number"
@@ -334,46 +334,44 @@ function buildLines<W extends string>(
   });
 }
 
+/** The book has not posted a line for the next game yet. The client chose this
+ * wording on 2026-09-11 over dropping the line entirely: a bare "Total" with no
+ * number (or a "Public: —") read as a broken alert rather than a missing line. */
+const NO_ODDS_YET = "no odds posted yet";
+
 /**
  * Format the "Next up" line for an email: the next scheduled game in the
  * league that has NOT started yet, with its Public/favorite side. For ATS we
  * show the favored team + spread; for totals the locked O/U + favorite side.
+ * A game the book has not priced yet says so instead of printing a half-line.
  * Returns null when there is no upcoming game to show.
  */
+
 function nextGameLine(category: BetCategory, g: Game | null | undefined): string | null {
   if (!g) return null;
-  const matchup = `${g.away.abbr} @ ${g.home.abbr}`;
-  const when = ` (${etKickoffLabel(g.startTime)})`;
+  const matchup = `${g.away.name} @ ${g.home.name}`;
+  const head = `Next up: ${g.league.toUpperCase()} — ${matchup} (${etKickoffLabel(g.startTime)})`;
   if (category === "ats") {
     const favSide = g.trend?.pickedSide;
     const fav = favSide === "home" ? g.home : favSide === "away" ? g.away : null;
+    if (!fav) return `${head} — ${NO_ODDS_YET}`;
     const homeSpread = g.trend?.spread;
     const favSpread =
-      typeof homeSpread === "number" && favSide
-        ? favSide === "home"
-          ? homeSpread
-          : -homeSpread
-        : null;
-    const publicLabel = fav
-      ? `Public: ${fav.abbr}${favSpread !== null ? ` ${favSpread > 0 ? "+" : ""}${favSpread}` : ""}`
-      : "Public: —";
-    return `Next up: ${g.league.toUpperCase()} — ${matchup}${when} — ${publicLabel}`;
+      typeof homeSpread === "number" ? (favSide === "home" ? homeSpread : -homeSpread) : null;
+    const spreadStr = favSpread !== null ? ` ${favSpread > 0 ? "+" : ""}${favSpread}` : "";
+    return `${head} — Public: ${fav.name}${spreadStr}`;
   }
   if (category === "moneyline") {
     const favSide = g.trend?.pickedSide;
     const fav = favSide === "home" ? g.home : favSide === "away" ? g.away : null;
-    const favOdds =
-      favSide === "home" ? g.trend?.mlOddsHome : favSide === "away" ? g.trend?.mlOddsAway : null;
-    const publicLabel = fav
-      ? `Public: ${fav.abbr} ML${favOdds ? ` (${favOdds})` : ""}`
-      : "Public: —";
-    return `Next up: ${g.league.toUpperCase()} — ${matchup}${when} — ${publicLabel}`;
+    if (!fav) return `${head} — ${NO_ODDS_YET}`;
+    const favOdds = favSide === "home" ? g.trend?.mlOddsHome : g.trend?.mlOddsAway;
+    return `${head} — Public: ${fav.name} ML${favOdds ? ` (${favOdds})` : ""}`;
   }
   const total = g.trend?.total;
-  const totalStr = typeof total === "number" ? ` ${total}` : "";
+  if (typeof total !== "number") return `${head} — ${NO_ODDS_YET}`;
   const fav = totalFavoriteSide(g.trend);
-  const favStr = fav ? `, Fav ${fav.toUpperCase()}` : "";
-  return `Next up: ${g.league.toUpperCase()} — ${matchup}${when} — Total${totalStr}${favStr}`;
+  return `${head} — Total ${total}${fav ? `, Fav ${fav.toUpperCase()}` : ""}`;
 }
 
 function withNextGame(lines: string[], category: BetCategory, nextGame: Game | null | undefined): string {

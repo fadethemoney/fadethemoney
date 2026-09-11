@@ -92,8 +92,8 @@ async function run() {
         const shown = h.winner === "public" ? favSpread : -favSpread;
         spreadStr = ` ${shown > 0 ? "+" : ""}${shown}`;
       }
-      const matchup = `${g.away.abbr} @ ${g.home.abbr}`;
-      const coveredName = covered?.abbr ?? (h.winner === "public" ? "favorite" : "underdog");
+      const matchup = `${g.away.name} @ ${g.home.name}`;
+      const coveredName = covered?.name ?? (h.winner === "public" ? "favorite" : "underdog");
       return `• ${g.league.toUpperCase()} — ${matchup} → ${coveredName} covered${spreadStr}`;
     });
     const side = streak.current?.toUpperCase();
