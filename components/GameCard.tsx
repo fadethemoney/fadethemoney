@@ -72,7 +72,8 @@ export function GameCard({
         <div className="odds-grid">
           <OddsRow
             team={game.away}
-            isFavorite={favSide === "away"}
+            isFavorite={market === "total" ? totalFav === "over" : favSide === "away"}
+            showPublicTag={market !== "total"}
             ml={t.mlOddsAway}
             spread={fmtSpread(-t.spread)}
             spreadOdds={t.spreadOddsAway}
@@ -82,7 +83,8 @@ export function GameCard({
           />
           <OddsRow
             team={game.home}
-            isFavorite={favSide === "home"}
+            isFavorite={market === "total" ? totalFav === "under" : favSide === "home"}
+            showPublicTag={market !== "total"}
             ml={t.mlOddsHome}
             spread={fmtSpread(t.spread)}
             spreadOdds={t.spreadOddsHome}
@@ -125,9 +127,12 @@ export function GameCard({
 }
 
 function OddsRow({
-  team, isFavorite, ml, spread, spreadOdds, totalLabel, totalOdds, totalIsFavorite,
+  team, isFavorite, showPublicTag, ml, spread, spreadOdds, totalLabel, totalOdds, totalIsFavorite,
 }: {
   team: Game["home"]; isFavorite: boolean;
+  /** Spread/ML only. On the totals tab the favorite is OVER/UNDER, not a team,
+   * so the team-level "Public" tag would contradict the "Fav" chip beside it. */
+  showPublicTag: boolean;
   ml: string | null;
   spread: string; spreadOdds: string | null;
   totalLabel: string; totalOdds: string | null;
@@ -139,7 +144,7 @@ function OddsRow({
         <span className="team-abbr">{team.abbr}</span>
         <span className="team-name">{team.name}</span>
         <span className="team-score">{team.score ?? ""}</span>
-        {isFavorite && <span className="pub-tag">Public</span>}
+        {isFavorite && showPublicTag && <span className="pub-tag">Public</span>}
       </span>
       <span className="or-cell or-line" data-market="ml">{fmtOdds(ml)}</span>
       <span className="or-cell or-line" data-market="spread">{spread}</span>
