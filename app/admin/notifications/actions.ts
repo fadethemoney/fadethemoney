@@ -100,6 +100,11 @@ export async function emailTip(tipId: string): Promise<EmailResult> {
     };
   }
 
+  // One address can own more than one profile row -- the same person signing up
+  // twice creates two auth users carrying the same email -- and Resend would then
+  // deliver the same pick twice. getAlertRecipients already dedupes this way for
+  // streak alerts; the picks email was the one send path that did not.
+  const seen = new Set<string>();
   const recipients = (subs ?? [])
     .filter(
       (r) =>
@@ -109,7 +114,13 @@ export async function emailTip(tipId: string): Promise<EmailResult> {
         PAID_STATUSES.includes(r.subscription_status as string),
     )
     .map((r) => (r.email as string)?.trim())
-    .filter(Boolean);
+    .filter(Boolean)
+    .filter((email) => {
+      const key = email.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
   if (recipients.length === 0) {
     await release();
     return { ok: false, error: "No members or trials to email yet." };
