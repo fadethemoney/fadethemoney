@@ -389,7 +389,13 @@ export async function fetchLeagueGames(
   opts: { hoursBack?: number; hoursForward?: number } = {},
 ): Promise<Game[]> {
   const hoursBack = opts.hoursBack ?? 96;
-  const hoursForward = opts.hoursForward ?? 48;
+  // Eight days. Weekly leagues have gaps a two-day window cannot span: NFL runs
+  // Thursday night to Sunday afternoon (~64h) and Monday night to the next
+  // Thursday (~69h), and inside those gaps a 48h fetch returned zero upcoming
+  // games. Measured against the live feed on 2026-09-11, widening 48h -> 192h
+  // costs 49 extra events and ~1 MB across all seven leagues, with no extra
+  // pagination. Callers still override this; see FORWARD_HOURS in the refresh route.
+  const hoursForward = opts.hoursForward ?? 192;
   const now = Date.now();
   const startsAfter = new Date(now - hoursBack * 3600_000).toISOString();
   const startsBefore = new Date(now + hoursForward * 3600_000).toISOString();

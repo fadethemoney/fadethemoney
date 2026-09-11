@@ -394,6 +394,9 @@ function authorize(req: Request): NextResponse | null {
 
 const MIN_INTERVAL_MS = 60_000;
 
+/** Eight days: covers every weekly-league gap with room to spare. */
+const FORWARD_HOURS = 192;
+
 async function maybeRefresh(req: Request) {
   const url = new URL(req.url);
   const force = url.searchParams.get("force") === "1" || !!req.headers.get("x-vercel-cron");
@@ -402,9 +405,15 @@ async function maybeRefresh(req: Request) {
   // already-FINAL games stay re-fetchable long enough for official post-final
   // scoring corrections to land and self-heal the streak. An explicit ?days=
   // override still wins.
+  //
+  // FORWARD_HOURS spans a full NFL week. A 48h window could not reach from a
+  // Thursday night game to the Sunday slate (~64h) or from Monday night to the
+  // next Thursday (~69h), so every NFL alert sent in those gaps reported "no
+  // upcoming game scheduled yet" while a full slate sat just outside the
+  // window, and the NFL dashboard tab had nothing to show either.
   const opts = Number.isFinite(days) && days > 0
-    ? { hoursBack: days * 24, hoursForward: 48 }
-    : { hoursBack: 96, hoursForward: 48 };
+    ? { hoursBack: days * 24, hoursForward: FORWARD_HOURS }
+    : { hoursBack: 96, hoursForward: FORWARD_HOURS };
   if (!force) {
     const store = await readStore();
     const ageMs = Date.now() - new Date(store.lastUpdated).getTime();

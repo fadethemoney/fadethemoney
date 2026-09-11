@@ -151,8 +151,15 @@ export async function upsertGames(incoming: Game[]): Promise<DataStore> {
     // streaks and from the verdict pill on the dashboard.
     const startMs = new Date(g.startTime).getTime();
     const started = Number.isFinite(startMs) && startMs <= now;
-    let lockedTrend = existing?.trend ?? g.trend;
-    if (started && !existing?.trend) lockedTrend = undefined;
+    // Before kickoff, keep taking the newest line, falling back to the last one
+    // we held if this tick's payload carries no odds. Commit 46b9772 set out to
+    // fix only the post-kickoff first-sighting case but rewrote this expression
+    // as `existing?.trend ?? g.trend`, which also froze the line at FIRST
+    // SIGHTING instead of at kickoff — so a game seen early was graded on a
+    // stale number that never caught up to the line it actually closed at. That
+    // stayed mild while we only looked 48h ahead; at 192h it would grade NFL
+    // games on a line posted eight days before kickoff.
+    const lockedTrend = started ? existing?.trend : (g.trend ?? existing?.trend);
     // Confirm a final once its box score has SETTLED, so streaks (and the
     // member alerts they fire) grade within minutes of the last out.
     //
