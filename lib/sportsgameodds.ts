@@ -304,7 +304,31 @@ function findOdd(
   return null;
 }
 
-function trendFromOdds(ev: ApiEvent): BettingTrend | undefined {
+/**
+ * The lowest full-game total each league can plausibly carry. Anything under it
+ * is a placeholder, not a line: early in the NHL preseason the feed opened
+ * NYI @ NJ (2026-09-20) at "Total 1.5" while books settled on 5.5, and that 1.5
+ * went out in a streak email's Next-up line. Several books (FanDuel, DraftKings,
+ * Caesars) post the same 1.5 on other preseason games. Each floor sits well
+ * below the lowest real total the league sees, so only junk is caught; a total
+ * under it is treated exactly like no total posted yet.
+ */
+const MIN_PLAUSIBLE_TOTAL: Record<League, number> = {
+  nhl: 3.5,
+  mlb: 4.5,
+  nfl: 20,
+  ncaaf: 20,
+  nba: 150,
+  wnba: 120,
+  ncaab: 90,
+};
+
+function plausibleTotal(total: number | null, league: League): number | null {
+  if (total === null) return null;
+  return total >= MIN_PLAUSIBLE_TOTAL[league] ? total : null;
+}
+
+function trendFromOdds(ev: ApiEvent, league: League): BettingTrend | undefined {
   if (!ev.status?.oddsPresent) return undefined;
   const spHome = findOdd(ev.odds, "sp", "home");
   const spAway = findOdd(ev.odds, "sp", "away");
@@ -318,16 +342,20 @@ function trendFromOdds(ev: ApiEvent): BettingTrend | undefined {
     (parseNum(spAway?.bookSpread) !== null ? -(parseNum(spAway!.bookSpread)!) : null) ??
     (parseNum(spAway?.fairSpread) !== null ? -(parseNum(spAway!.fairSpread)!) : null);
 
-  const total =
-    parseNum(ouOver?.bookOverUnder) ??
-    parseNum(ouOver?.fairOverUnder);
+  const total = plausibleTotal(
+    parseNum(ouOver?.bookOverUnder) ?? parseNum(ouOver?.fairOverUnder),
+    league,
+  );
 
   if (spread === null || total === null) return undefined;
 
   const openingSpread =
     parseNum(spHome?.openBookSpread) ?? parseNum(spHome?.openFairSpread) ?? undefined;
   const openingTotal =
-    parseNum(ouOver?.openBookOverUnder) ?? parseNum(ouOver?.openFairOverUnder) ?? undefined;
+    plausibleTotal(
+      parseNum(ouOver?.openBookOverUnder) ?? parseNum(ouOver?.openFairOverUnder),
+      league,
+    ) ?? undefined;
 
   const pickedSide: Side = spread <= 0 ? "home" : "away";
 
@@ -379,7 +407,7 @@ function toGame(ev: ApiEvent, league: League): Game | null {
     period: pickPeriod(ev.status),
     home,
     away,
-    trend: trendFromOdds(ev),
+    trend: trendFromOdds(ev, league),
     finalized: ev.status?.finalized === true,
     periodsComplete: periodsComplete(ev.status),
     updatedAt: new Date().toISOString(),
@@ -433,7 +461,7 @@ export async function fetchLeagueGames(
  * they must never grade a historical game. The `open*` fields preserve the true
  * pregame number; we lock and score against those.
  */
-function openingTrendFromOdds(ev: ApiEvent): BettingTrend | undefined {
+function openingTrendFromOdds(ev: ApiEvent, league: League): BettingTrend | undefined {
   const spHome = findOdd(ev.odds, "sp", "home");
   const spAway = findOdd(ev.odds, "sp", "away");
   const ouOver = findOdd(ev.odds, "ou", "over");
@@ -446,8 +474,10 @@ function openingTrendFromOdds(ev: ApiEvent): BettingTrend | undefined {
     parseNum(spHome?.openFairSpread) ??
     (parseNum(spAway?.openBookSpread) !== null ? -(parseNum(spAway!.openBookSpread)!) : null) ??
     (parseNum(spAway?.openFairSpread) !== null ? -(parseNum(spAway!.openFairSpread)!) : null);
-  const total =
-    parseNum(ouOver?.openBookOverUnder) ?? parseNum(ouOver?.openFairOverUnder);
+  const total = plausibleTotal(
+    parseNum(ouOver?.openBookOverUnder) ?? parseNum(ouOver?.openFairOverUnder),
+    league,
+  );
   if (spread === null || total === null) return undefined;
 
   const pickedSide: Side = spread <= 0 ? "home" : "away";
@@ -489,7 +519,7 @@ function toHistoricalGame(ev: ApiEvent, league: League): Game | null {
   home.score = homePts;
   away.score = awayPts;
 
-  const trend = openingTrendFromOdds(ev);
+  const trend = openingTrendFromOdds(ev, league);
   if (!trend) return null;
 
   return {
