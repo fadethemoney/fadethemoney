@@ -31,6 +31,26 @@ function shouldNotifyAt(n: number): boolean {
 }
 
 /**
+ * A gap this long between two consecutive graded games ends the run, even when
+ * both went the same way. Nothing else resets a league's streak at a season
+ * boundary, so a run just carried across the offseason: on 2026-10-16, four days
+ * before the NBA opener, the stored NBA state was still `ats: vegas 5` and
+ * `total: vegas 1` off the Finals, newest result 2026-06-13. That broke opening
+ * night both ways. A dog cover would have emailed "VEGAS has won 2 totals in a
+ * row" quoting Knicks @ Spurs from June 11 as current form; a favorite cover
+ * would have taken ATS to 6 with lastNotifiedCount pinned at 5, and since only
+ * 2 and 4 notify, every NBA spread alert stayed silent until a Public result
+ * finally broke the June run.
+ *
+ * 30 days clears every in-season break by a wide margin — the longest is NCAAF
+ * conference championships to a ranked bowl game, about 26 days — and sits far
+ * below every offseason, the shortest of which is MLB's ~4 months. The same
+ * guard covers WNBA next May and MLB next spring without another data patch.
+ */
+const SEASON_GAP_MS =
+  Number(process.env.STREAK_SEASON_GAP_MS) || 30 * 24 * 3600_000;
+
+/**
  * Milestone counts to email this run: every not-yet-notified count between
  * lastNotifiedCount+1 and streak.count that is in NOTIFY_COUNTS (2 or 4). Walking
  * each step (rather than just the top) means a multi-game jump still emits each
@@ -214,17 +234,24 @@ export function updateCategoryStreak<W extends string>(
     return a.g.id < b.g.id ? -1 : a.g.id > b.g.id ? 1 : 0;
   });
 
-  // Current streak = trailing run of identical winners, walking newest → older.
+  // Current streak = trailing run of identical winners, walking newest → older,
+  // stopping at an offseason-sized gap (see SEASON_GAP_MS).
   let current: W | null = null;
   let count = 0;
+  let newerStart: number | null = null;
   for (let i = graded.length - 1; i >= 0; i--) {
-    const w = graded[i].w;
+    const { g, w } = graded[i];
+    const startMs = new Date(g.startTime).getTime();
     if (count === 0) {
       current = w;
       count = 1;
-    } else if (w === current) {
-      count += 1;
-    } else break;
+      newerStart = startMs;
+      continue;
+    }
+    if (w !== current) break;
+    if (newerStart !== null && newerStart - startMs > SEASON_GAP_MS) break;
+    count += 1;
+    newerStart = startMs;
   }
 
   const tail = count > 0 ? graded.slice(graded.length - count) : [];
