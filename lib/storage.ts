@@ -119,7 +119,10 @@ export async function writeStore(store: DataStore): Promise<void> {
  */
 const FINAL_SETTLE_MS = Number(process.env.FINAL_SETTLE_MS) || 90_000;
 
-export async function upsertGames(incoming: Game[]): Promise<DataStore> {
+export async function upsertGames(
+  incoming: Game[],
+  opts: { prunableLeagues?: readonly League[] } = {},
+): Promise<DataStore> {
   const store = await readStoreFresh();
   const incomingIds = new Set(incoming.map((g) => g.id));
   const map = new Map<string, Game>();
@@ -129,11 +132,28 @@ export async function upsertGames(incoming: Game[]): Promise<DataStore> {
   // odds feeds before they're tagged "final", and we'd lose them otherwise.
   const RECENT_MS = 72 * 3600_000;
   const now = Date.now();
+  // Leagues whose fetch succeeded this tick, so an absence from `incoming` is
+  // real information rather than a failed request. Empty = prune nothing.
+  const prunable = new Set(opts.prunableLeagues ?? []);
   for (const g of store.games) {
-    const recent = now - new Date(g.startTime).getTime() < RECENT_MS;
+    // "Recent" has to mean STARTED within the last 72h. It used to be a bare
+    // `now - startTime < RECENT_MS`, which is also true of every FUTURE game
+    // (a negative age), so a scheduled game could never leave the store once
+    // stored — and `toGame` returns null for a cancelled event, so a game the
+    // feed cancels simply vanishes from `incoming` and the stale copy lived on
+    // forever. That is how a cancelled MLB "if necessary" playoff game stayed
+    // in the store for days and surfaced in a streak email's Next-up line on
+    // 2026-10-08 (Padres @ Brewers, two days after Milwaukee clinched).
+    const ageMs = now - new Date(g.startTime).getTime();
+    const recent = ageMs >= 0 && ageMs < RECENT_MS;
     if (g.status === "final" || incomingIds.has(g.id) || recent) {
       map.set(g.id, g);
+      continue;
     }
+    // Absent from this tick's payload and not recently started. Drop it only if
+    // we know this league actually answered — otherwise one failed request
+    // would wipe the league's entire upcoming slate.
+    if (!prunable.has(g.league)) map.set(g.id, g);
   }
   for (const g of incoming) {
     const existing = map.get(g.id);

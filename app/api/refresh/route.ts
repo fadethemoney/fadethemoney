@@ -14,7 +14,7 @@ import {
   writeStore,
 } from "@/lib/storage";
 import { summarizeDay, todayKey } from "@/lib/calc";
-import { filterRankedAllLeagues } from "@/lib/rankings";
+import { filterRankedAllLeagues, isCollegeLeague } from "@/lib/rankings";
 import { LEAGUES_ALL, leagueHasCategory } from "@/lib/leagues";
 import { etDateKeyOf } from "@/lib/time";
 import { notifyAdmin, sendStreakAlert, type NotifyResult } from "@/lib/mailer";
@@ -74,7 +74,17 @@ async function doRefresh(
   // 2026-07-12). Full NCAA slates would flood the dashboard and streak emails.
   const rankedOnly = await filterRankedAllLeagues(fetched);
   const all = finalizeGames(rankedOnly);
-  await upsertGames(all);
+  // Let the upsert drop stored future games this tick's payload no longer
+  // lists, but only where an absence is trustworthy: the league answered, and
+  // its incoming set is not narrowed by a SECOND external API. College is
+  // excluded because filterRankedGames drops every college game when the AP
+  // poll is unavailable, so one ESPN hiccup would wipe the stored NCAAB/NCAAF
+  // slate rather than removing a cancelled game.
+  const failedLeagues = new Set(fetchErrors.map((e) => e.league));
+  const prunableLeagues = LEAGUES.filter(
+    (l) => !failedLeagues.has(l) && !isCollegeLeague(l),
+  );
+  await upsertGames(all, { prunableLeagues });
 
   // Attach (or re-attach) finalResult on every stored final using the LOCKED
   // pregame trend. Idempotent: re-running fixes verdicts that were previously
