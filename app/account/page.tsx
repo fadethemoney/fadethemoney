@@ -7,9 +7,10 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { isValidEmail, passwordIssue, phoneIssue } from "@/lib/validation";
 import { MembershipSection, type MembershipInfo } from "@/components/account/MembershipSection";
 import { AlertPreferences } from "@/components/account/AlertPreferences";
+import { LEAGUES_ALL } from "@/lib/leagues";
 import type { League } from "@/lib/types";
 
-const ALL_LEAGUES: League[] = ["nba", "wnba", "mlb", "nfl", "nhl", "ncaab", "ncaaf"];
+const ALL_LEAGUES: League[] = LEAGUES_ALL;
 
 function initials(name: string) {
   const parts = name.trim().split(/\s+/).filter(Boolean);

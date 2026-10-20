@@ -1,14 +1,9 @@
 import Link from "next/link";
+import { LEAGUES_ALL, LEAGUE_LABEL } from "@/lib/leagues";
 
 const LEAGUES = [
   { slug: "", label: "All" },
-  { slug: "nba", label: "NBA" },
-  { slug: "wnba", label: "WNBA" },
-  { slug: "mlb", label: "MLB" },
-  { slug: "nfl", label: "NFL" },
-  { slug: "nhl", label: "NHL" },
-  { slug: "ncaab", label: "NCAAB" },
-  { slug: "ncaaf", label: "NCAAF" },
+  ...LEAGUES_ALL.map((l) => ({ slug: l, label: LEAGUE_LABEL[l] })),
 ];
 
 export function LeagueFilter({ active }: { active?: string }) {

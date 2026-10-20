@@ -1,6 +1,7 @@
 import "server-only";
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { LEAGUES_ALL } from "@/lib/leagues";
 import type { League } from "@/lib/types";
 import type {
   MemberAccess,
@@ -30,15 +31,7 @@ export type { MemberAccess, SubscriptionPlan, SubscriptionStatus };
  */
 const ACTIVE_STATUSES: readonly SubscriptionStatus[] = ["trialing", "active", "past_due"];
 
-export const ALL_ALERT_LEAGUES: League[] = [
-  "nba",
-  "wnba",
-  "mlb",
-  "nfl",
-  "nhl",
-  "ncaab",
-  "ncaaf",
-];
+export const ALL_ALERT_LEAGUES: League[] = LEAGUES_ALL;
 
 const LOCKED_OUT: MemberAccess = {
   signedIn: false,

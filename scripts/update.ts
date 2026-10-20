@@ -26,9 +26,10 @@ import {
   getLeagueStreaks,
   MIN_NOTIFY_COUNT,
 } from "../lib/streak";
+import { LEAGUES_ALL, leagueHasCategory } from "../lib/leagues";
 import type { League, LeagueStreaks, StreakState } from "../lib/types";
 
-const LEAGUES: League[] = ["nba", "wnba", "mlb", "nfl", "nhl", "ncaab", "ncaaf"];
+const LEAGUES: League[] = LEAGUES_ALL;
 
 async function run() {
   const fetched = await fetchAllGames(LEAGUES);
@@ -118,11 +119,17 @@ async function run() {
   for (const league of LEAGUES) {
     if (!perLeague[league]) continue;
     const ls = getLeagueStreaks(perLeague, league);
-    for (const email of buildAtsEmails(league, ls.ats, gameByIdPer)) {
+    const atsEmails = leagueHasCategory(league, "ats")
+      ? buildAtsEmails(league, ls.ats, gameByIdPer)
+      : [];
+    for (const email of atsEmails) {
       await notifyAdmin({ subject: email.subject, text: email.text });
       ls.ats = { ...ls.ats, lastNotifiedCount: email.newLastNotifiedCount };
     }
-    for (const email of buildTotalEmails(league, ls.total, gameByIdPer)) {
+    const totalEmails = leagueHasCategory(league, "total")
+      ? buildTotalEmails(league, ls.total, gameByIdPer)
+      : [];
+    for (const email of totalEmails) {
       await notifyAdmin({ subject: email.subject, text: email.text });
       ls.total = { ...ls.total, lastNotifiedCount: email.newLastNotifiedCount };
     }

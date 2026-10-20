@@ -1,4 +1,12 @@
-export type League = "nba" | "wnba" | "mlb" | "nfl" | "nhl" | "ncaab" | "ncaaf";
+export type League =
+  | "nba"
+  | "wnba"
+  | "mlb"
+  | "nfl"
+  | "nhl"
+  | "ncaab"
+  | "ncaaf"
+  | "laliga";
 
 export type GameStatus = "scheduled" | "live" | "final";
 

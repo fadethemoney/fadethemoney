@@ -20,6 +20,7 @@ const LEAGUE_TO_API: Record<League, string> = {
   nhl: "NHL",
   ncaab: "NCAAB",
   ncaaf: "NCAAF",
+  laliga: "LA_LIGA",
 };
 
 export class SportsGameOddsError extends Error {}
@@ -321,6 +322,12 @@ const MIN_PLAUSIBLE_TOTAL: Record<League, number> = {
   nba: 150,
   wnba: 120,
   ncaab: 90,
+  // Soccer totals are genuinely tiny: La Liga posts 0.5 through 4.5, and a real
+  // 1.5 occurred on 6 matches this season. 1.5 is also the exact bogus NHL
+  // placeholder that prompted this guard, so the floor sits at 0.5 and catches
+  // only a non-positive line. The junk-line guard is effectively blind here --
+  // there is no plausibility gap to exploit in a 0.5-4.5 range.
+  laliga: 0.5,
 };
 
 function plausibleTotal(total: number | null, league: League): number | null {

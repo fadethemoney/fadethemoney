@@ -11,7 +11,9 @@ import type {
 import { totalFavoriteSide } from "./calc";
 import { etDateKeyOf, etKickoffLabel } from "./time";
 
-export const LEAGUES_ALL: League[] = ["nba", "wnba", "mlb", "nfl", "nhl", "ncaab", "ncaaf"];
+import { LEAGUE_LABEL, leagueHasCategory } from "./leagues";
+
+export { LEAGUES_ALL } from "./leagues";
 
 /**
  * Exact streak counts that trigger an email: one early heads-up at 2, then one
@@ -25,6 +27,16 @@ export const NOTIFY_COUNTS: readonly number[] = [2, 4];
  * scripts/update.ts, which gates on a single >= threshold.
  */
 export const MIN_NOTIFY_COUNT = 4;
+
+/**
+ * League name as an alert prints it. Every other league is an acronym, so a bare
+ * toUpperCase() was fine until La Liga arrived and read "LALIGA" — the same
+ * class of unreadable email as the "AWAY @ HOME" bug. LEAGUE_LABEL carries the
+ * display name, uppercased here to match the rest of the subject line.
+ */
+function leagueTag(league: League): string {
+  return (LEAGUE_LABEL[league] ?? league).toUpperCase();
+}
 
 function shouldNotifyAt(n: number): boolean {
   return NOTIFY_COUNTS.includes(n);
@@ -117,7 +129,11 @@ function applyWinner<W extends string>(
   return next;
 }
 
-/** Apply a final game to a league's ATS + Total streaks. Returns updated pair. */
+/** Apply a final game to a league's ATS + Total streaks. Returns updated pair.
+ *
+ * A category its league does not run is skipped — see LEAGUE_CATEGORIES in
+ * lib/leagues.ts. Gating here (rather than at each caller) keeps the legacy
+ * cross-league script in scripts/update.ts honest too. */
 export function applyGameToLeagueStreaks(
   streaks: LeagueStreaks,
   game: Game,
@@ -127,7 +143,7 @@ export function applyGameToLeagueStreaks(
   let next = streaks;
 
   const covered = game.finalResult.publicCovered;
-  if (covered !== null) {
+  if (covered !== null && leagueHasCategory(game.league, "ats")) {
     const w: AtsWinner = covered ? "public" : "vegas";
     const updated = applyWinner(next.ats, game, w, today);
     if (updated) next = { ...next, ats: updated };
@@ -137,7 +153,7 @@ export function applyGameToLeagueStreaks(
   // not whether it was Over or Under. Favorite covered → "public"; dog → "vegas".
   const over = game.finalResult.totalGoOver;
   const totalFav = totalFavoriteSide(game.trend);
-  if (over !== null && totalFav !== null) {
+  if (over !== null && totalFav !== null && leagueHasCategory(game.league, "total")) {
     const favWon = totalFav === (over ? "over" : "under");
     const w: TotalWinner = favWon ? "public" : "vegas";
     const updated = applyWinner(next.total, game, w, today);
@@ -150,7 +166,11 @@ export function applyGameToLeagueStreaks(
   // skipped, like an ATS/Total push. Requires a locked trend so we know which
   // side was favored pregame.
   const favSide = game.trend?.pickedSide;
-  if (favSide && game.finalResult.winnerSide !== "tie") {
+  if (
+    favSide &&
+    game.finalResult.winnerSide !== "tie" &&
+    leagueHasCategory(game.league, "moneyline")
+  ) {
     const favWon = game.finalResult.winnerSide === favSide;
     const w: MoneylineWinner = favWon ? "public" : "vegas";
     const updated = applyWinner(next.moneyline, game, w, today);
@@ -327,7 +347,7 @@ function buildLines<W extends string>(
           ? ` ${g.away.score}-${g.home.score}`
           : "";
       const outcome = h.winner === "public" ? "PUBLIC WIN ✓" : "VEGAS WIN ✗";
-      return `• ${g.league.toUpperCase()} — ${matchup}${score} — ${publicLabel} → ${outcome}`;
+      return `• ${leagueTag(g.league)} — ${matchup}${score} — ${publicLabel} → ${outcome}`;
     }
     if (category === "moneyline") {
       // Moneyline: the betting favorite is "public". Show the favored team, its
@@ -344,7 +364,7 @@ function buildLines<W extends string>(
           ? ` ${g.away.score}-${g.home.score}`
           : "";
       const outcome = h.winner === "public" ? "PUBLIC WIN ✓" : "VEGAS WIN ✗";
-      return `• ${g.league.toUpperCase()} — ${matchup}${score} — ${publicLabel} → ${outcome}`;
+      return `• ${leagueTag(g.league)} — ${matchup}${score} — ${publicLabel} → ${outcome}`;
     }
     // Totals: track whether the juice-favorite side of the total won. Show the
     // locked pregame O/U, the favorite side, the final score, and the outcome.
@@ -357,7 +377,7 @@ function buildLines<W extends string>(
         ? ` ${g.away.score}-${g.home.score}`
         : "";
     const outcome = h.winner === "public" ? "PUBLIC WIN ✓" : "VEGAS WIN ✗";
-    return `• ${g.league.toUpperCase()} — ${matchup}${score} — Total${totalStr}${favStr} → ${outcome}`;
+    return `• ${leagueTag(g.league)} — ${matchup}${score} — Total${totalStr}${favStr} → ${outcome}`;
   });
 }
 
@@ -377,7 +397,7 @@ const NO_ODDS_YET = "no odds posted yet";
 function nextGameLine(category: BetCategory, g: Game | null | undefined): string | null {
   if (!g) return null;
   const matchup = `${g.away.name} @ ${g.home.name}`;
-  const head = `Next up: ${g.league.toUpperCase()} — ${matchup} (${etKickoffLabel(g.startTime)})`;
+  const head = `Next up: ${leagueTag(g.league)} — ${matchup} (${etKickoffLabel(g.startTime)})`;
   if (category === "ats") {
     const favSide = g.trend?.pickedSide;
     const fav = favSide === "home" ? g.home : favSide === "away" ? g.away : null;
@@ -422,11 +442,11 @@ export function buildAtsEmails(
   const out: StreakEmail[] = [];
   for (const n of notifyMilestones(streak)) {
     const side = streak.current?.toUpperCase();
-    const header = `${league.toUpperCase()} SPREAD — ${side} has won ${n} bets in a row (ATS).`;
+    const header = `${leagueTag(league)} SPREAD — ${side} has won ${n} bets in a row (ATS).`;
     out.push({
       league,
       category: "ats",
-      subject: `Fade The Money — ${league.toUpperCase()} ${streak.current} on a ${n}-game spread streak`,
+      subject: `Fade The Money — ${leagueTag(league)} ${streak.current} on a ${n}-game spread streak`,
       text: withNextGame([header, "", ...buildLines("ats", streak, gamesById, n)], "ats", nextGame),
       newLastNotifiedCount: n,
     });
@@ -443,11 +463,11 @@ export function buildTotalEmails(
   const out: StreakEmail[] = [];
   for (const n of notifyMilestones(streak)) {
     const side = streak.current?.toUpperCase();
-    const header = `${league.toUpperCase()} TOTAL — ${side} has won ${n} totals in a row.`;
+    const header = `${leagueTag(league)} TOTAL — ${side} has won ${n} totals in a row.`;
     out.push({
       league,
       category: "total",
-      subject: `Fade The Money — ${league.toUpperCase()} ${side} on a ${n}-total streak (totals)`,
+      subject: `Fade The Money — ${leagueTag(league)} ${side} on a ${n}-total streak (totals)`,
       text: withNextGame([header, "", ...buildLines("total", streak, gamesById, n)], "total", nextGame),
       newLastNotifiedCount: n,
     });
@@ -464,11 +484,11 @@ export function buildMoneylineEmails(
   const out: StreakEmail[] = [];
   for (const n of notifyMilestones(streak)) {
     const side = streak.current?.toUpperCase();
-    const header = `${league.toUpperCase()} MONEYLINE — ${side} has won ${n} bets in a row (straight up).`;
+    const header = `${leagueTag(league)} MONEYLINE — ${side} has won ${n} bets in a row (straight up).`;
     out.push({
       league,
       category: "moneyline",
-      subject: `Fade The Money — ${league.toUpperCase()} ${streak.current} on a ${n}-game moneyline streak`,
+      subject: `Fade The Money — ${leagueTag(league)} ${streak.current} on a ${n}-game moneyline streak`,
       text: withNextGame([header, "", ...buildLines("moneyline", streak, gamesById, n)], "moneyline", nextGame),
       newLastNotifiedCount: n,
     });
@@ -511,11 +531,11 @@ export function buildCorrectionEmail<W extends string>(
   return {
     league,
     category,
-    subject: `Fade The Money — CORRECTION: ${league.toUpperCase()} ${cat} streak revised`,
+    subject: `Fade The Money — CORRECTION: ${leagueTag(league)} ${cat} streak revised`,
     text: [
       `An official score update changed a previously graded result.`,
       ``,
-      `${league.toUpperCase()} ${cat}: ${changed.length} game(s) in the ${wasSide} ${prev.lastNotifiedCount}-streak we alerted on were re-graded, so that streak has been revised — please disregard the earlier alert.`,
+      `${leagueTag(league)} ${cat}: ${changed.length} game(s) in the ${wasSide} ${prev.lastNotifiedCount}-streak we alerted on were re-graded, so that streak has been revised — please disregard the earlier alert.`,
     ].join("\n"),
     newLastNotifiedCount: prev.lastNotifiedCount,
   };

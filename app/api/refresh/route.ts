@@ -15,6 +15,7 @@ import {
 } from "@/lib/storage";
 import { summarizeDay, todayKey } from "@/lib/calc";
 import { filterRankedAllLeagues } from "@/lib/rankings";
+import { LEAGUES_ALL, leagueHasCategory } from "@/lib/leagues";
 import { etDateKeyOf } from "@/lib/time";
 import { notifyAdmin, sendStreakAlert, type NotifyResult } from "@/lib/mailer";
 import {
@@ -29,11 +30,11 @@ import {
   totalWinnerOf,
   updateCategoryStreak,
 } from "@/lib/streak";
-import type { FetchAlertState, League, LeagueStreaks } from "@/lib/types";
+import type { BetCategory, FetchAlertState, League, LeagueStreaks } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-const LEAGUES: League[] = ["nba", "wnba", "mlb", "nfl", "nhl", "ncaab", "ncaaf"];
+const LEAGUES: League[] = LEAGUES_ALL;
 
 async function runRefresh(opts: { hoursBack?: number; hoursForward?: number } = {}) {
   // Serialize overlapping cron invocations: Vercel cron is best-effort and can
@@ -128,7 +129,11 @@ async function doRefresh(
   // detail-less global email was retired earlier; the per-league emails below
   // carry the formatted alerts. Re-graded from current stored scores each tick,
   // so a verdict that changes after a late box-score correction self-heals.
-  const globalStreak = updateCategoryStreak(store.streak, confirmedFinals, gameById, atsWinnerOf);
+  // Totals-only leagues are excluded here as well as per-league: La Liga's ATS
+  // side is arbitrary on a level handicap, so grading it would feed junk into
+  // the cross-league counter behind the homepage eyebrow and StreakBanner.
+  const atsFinals = confirmedFinals.filter((g) => leagueHasCategory(g.league, "ats"));
+  const globalStreak = updateCategoryStreak(store.streak, atsFinals, gameById, atsWinnerOf);
   await setStreak(globalStreak);
 
   // Per-league × per-category (ATS + Total + Moneyline) streaks with emails.
@@ -136,10 +141,23 @@ async function doRefresh(
   for (const league of LEAGUES) {
     const prev = getLeagueStreaks(perLeague, league);
     const lf = confirmedFinals.filter((g) => g.league === league);
+    // A category this league does not run (La Liga spreads + moneyline) is fed
+    // no games at all, so its stored streak stays empty and can never reach a
+    // milestone. Gating the EMAIL alone would not be enough and gating the
+    // spread UI certainly is not: moneyline grades off `pickedSide`, derived
+    // from the spread rather than from ML prices, so both categories would keep
+    // running on an arbitrary side and keep emailing. See lib/leagues.ts.
+    const gradeable = (category: BetCategory) =>
+      leagueHasCategory(league, category) ? lf : [];
     const ls: LeagueStreaks = {
-      ats: updateCategoryStreak(prev.ats, lf, gameById, atsWinnerOf),
-      total: updateCategoryStreak(prev.total, lf, gameById, totalWinnerOf),
-      moneyline: updateCategoryStreak(prev.moneyline, lf, gameById, moneylineWinnerOf),
+      ats: updateCategoryStreak(prev.ats, gradeable("ats"), gameById, atsWinnerOf),
+      total: updateCategoryStreak(prev.total, gradeable("total"), gameById, totalWinnerOf),
+      moneyline: updateCategoryStreak(
+        prev.moneyline,
+        gradeable("moneyline"),
+        gameById,
+        moneylineWinnerOf,
+      ),
     };
     const nextGame = findNextGame(store.games, league);
 
@@ -149,8 +167,12 @@ async function doRefresh(
     // notice. Best-effort: a failed send is warned, not retried — the on-site
     // streak has already self-healed via updateCategoryStreak.
     for (const corr of [
-      buildCorrectionEmail(league, "ats", prev.ats, gameById, atsWinnerOf),
-      buildCorrectionEmail(league, "total", prev.total, gameById, totalWinnerOf),
+      leagueHasCategory(league, "ats")
+        ? buildCorrectionEmail(league, "ats", prev.ats, gameById, atsWinnerOf)
+        : null,
+      leagueHasCategory(league, "total")
+        ? buildCorrectionEmail(league, "total", prev.total, gameById, totalWinnerOf)
+        : null,
     ]) {
       if (!corr) continue;
       try {
@@ -184,7 +206,10 @@ async function doRefresh(
       perLeague[league] = ls;
       await setLeagueStreaks(perLeague);
     };
-    for (const email of buildAtsEmails(league, ls.ats, gameById, nextGame)) {
+    const atsEmails = leagueHasCategory(league, "ats")
+      ? buildAtsEmails(league, ls.ats, gameById, nextGame)
+      : [];
+    for (const email of atsEmails) {
       let res;
       try {
         res = await sendStreakAlert({ league, subject: email.subject, text: email.text });
@@ -199,7 +224,10 @@ async function doRefresh(
       ls.ats = { ...ls.ats, lastNotifiedCount: email.newLastNotifiedCount };
       await persistSends();
     }
-    for (const email of buildTotalEmails(league, ls.total, gameById, nextGame)) {
+    const totalEmails = leagueHasCategory(league, "total")
+      ? buildTotalEmails(league, ls.total, gameById, nextGame)
+      : [];
+    for (const email of totalEmails) {
       let res;
       try {
         res = await sendStreakAlert({ league, subject: email.subject, text: email.text });

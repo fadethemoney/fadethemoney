@@ -13,6 +13,8 @@ const LEAGUES: { id: League; label: string }[] = [
   { id: "nhl", label: "NHL" },
   { id: "ncaab", label: "NCAAB" },
   { id: "ncaaf", label: "NCAAF" },
+  // La Liga alerts cover totals only — see LEAGUE_CATEGORIES in lib/leagues.ts.
+  { id: "laliga", label: "La Liga (totals)" },
 ];
 
 /**

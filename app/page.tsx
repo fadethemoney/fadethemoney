@@ -11,20 +11,13 @@ import { getPublishedArticles } from "@/lib/articles";
 import { getMemberAccess } from "@/lib/subscription";
 import { TRIAL_DAYS } from "@/lib/plans";
 import { redactStoreForFreeTier } from "@/lib/paywall";
+import { LEAGUE_LABEL as SHARED_LEAGUE_LABEL } from "@/lib/leagues";
 import type { Game } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-const LEAGUE_LABEL: Record<string, string> = {
-  nba: "NBA",
-  wnba: "WNBA",
-  mlb: "MLB",
-  nfl: "NFL",
-  nhl: "NHL",
-  ncaab: "NCAAB",
-  ncaaf: "NCAAF",
-};
+const LEAGUE_LABEL: Record<string, string> = SHARED_LEAGUE_LABEL;
 
 function emptyMessage(league: string | undefined, totalGames: number): React.ReactNode {
   if (league && totalGames > 0) {
