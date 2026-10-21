@@ -24,14 +24,39 @@ import type {
  * Caveats:
  *   - In-memory cache is per-instance. With multiple Vercel Functions running
  *     in parallel, each gets its own copy — fine for our cron-driven model.
- *   - Concurrent writers can clobber each other (read-modify-write race). Our
- *     pipeline is a single cron tick, so this is theoretical.
+ *   - Concurrent writers can clobber each other (read-modify-write race). The
+ *     lease in acquireLease keeps one tick off another's toes, but it is
+ *     advisory and fail-open, so a truly simultaneous pair can still race.
+ *   - A SINGLE tick could also clobber itself, which is not theoretical and was
+ *     the duplicate-alert bug: see OWN_WRITE_TRUST_MS. Any read-modify-write on
+ *     this store must go through readStoreFresh, never a bare readStore.
  */
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const STORE_PATH = path.join(DATA_DIR, "store.json");
 const BLOB_KEY = "store.json";
 const CACHE_TTL_MS = 5_000;
+/**
+ * How long this instance keeps trusting a store IT wrote, for the
+ * read-modify-write helpers only.
+ *
+ * CACHE_TTL_MS (5s) is far too short to hold a refresh tick together. A tick
+ * does real network work between its store writes — seven league fetches, a
+ * Supabase recipient lookup, a Resend send per alert — so the gap between two
+ * writes routinely exceeds 5s. Once it did, readStoreFresh() fell through to a
+ * fresh Blob read; Vercel Blob is eventually consistent, so that read could
+ * hand back the PRE-write snapshot, and writing it back silently rolled the
+ * tick's earlier writes off the blob. When the rolled-back field was a
+ * just-advanced lastNotifiedCount, the next tick rebuilt the same milestone and
+ * mailed it again: 38 of 249 alert batches between 2026-09-22 and 2026-10-21
+ * went out twice (15%), most of them exactly one 2-minute cron tick apart. It
+ * survived the per-send persist fix (56b103c, 2026-09-10) because the send was
+ * always persisted — the persisted value was then overwritten.
+ *
+ * Bounded BELOW the 2-minute cron period so an instance reused by the next tick
+ * always re-reads the blob and still sees another instance's writes.
+ */
+const OWN_WRITE_TRUST_MS = 90_000;
 
 const EMPTY: DataStore = {
   games: [],
@@ -48,14 +73,17 @@ function useBlob(): boolean {
 }
 
 // --- in-process read cache ---
-let cache: { value: DataStore; at: number } | null = null;
-function readCache(): DataStore | null {
+// `written` marks a value this instance last WROTE, as opposed to one it read.
+// Our own write is the freshest truth we have — fresher than a Blob re-read,
+// which may still be serving the previous version.
+let cache: { value: DataStore; at: number; written: boolean } | null = null;
+function readCache(maxAgeMs: number = CACHE_TTL_MS): DataStore | null {
   if (!cache) return null;
-  if (Date.now() - cache.at > CACHE_TTL_MS) return null;
+  if (Date.now() - cache.at > maxAgeMs) return null;
   return cache.value;
 }
-function setCache(v: DataStore) {
-  cache = { value: v, at: Date.now() };
+function setCache(v: DataStore, written = false) {
+  cache = { value: v, at: Date.now(), written };
 }
 function bustCache() {
   cache = null;
@@ -109,7 +137,7 @@ export async function writeStore(store: DataStore): Promise<void> {
   store.lastUpdated = new Date().toISOString();
   if (useBlob()) await writeToBlob(store);
   else await writeToFile(store);
-  setCache(store); // keep cache warm with what we just wrote
+  setCache(store, true); // our own write is the freshest truth this instance has
 }
 
 /**
@@ -305,12 +333,17 @@ export async function acquireLease(holder: string): Promise<boolean> {
 
 export async function releaseLease(holder: string): Promise<void> {
   try {
-    // Read through the WARM cache, NOT a fresh Blob read. By the time we release,
+    // Read our OWN last write, not a fresh Blob read. By the time we release,
     // doRefresh's writes this tick have left the cache holding the correct final
     // state; Vercel Blob has read-after-write latency, so re-reading here would
     // resurrect a pre-write snapshot and clobber this tick's games/streaks (the
     // exact hazard documented on readStoreFresh). We only clear our lock field.
-    const store = await readStore();
+    //
+    // This must be readStoreFresh, not readStore: this is the LAST write of the
+    // tick and it lands well after the 5s CACHE_TTL_MS, so readStore would have
+    // gone to the blob anyway and written back a stale store — re-opening an
+    // already-sent milestone for the next tick to mail a second time.
+    const store = await readStoreFresh();
     if (store.lock?.holder === holder) {
       store.lock = null;
       await writeStore(store);
@@ -321,12 +354,17 @@ export async function releaseLease(holder: string): Promise<void> {
 }
 
 /**
- * Read-modify-write helper. Trusts the in-process cache so we read the state
- * we just wrote earlier in the same request — Vercel Blob has read-after-write
- * latency, and bypassing the cache here caused subsequent writes to clobber
- * fresh data with the pre-write blob snapshot.
+ * Read-modify-write helper. Prefers a store THIS instance wrote — for up to
+ * OWN_WRITE_TRUST_MS, deliberately NOT the 5s dashboard TTL — over a fresh Blob
+ * read, so a tick always modifies the state it last wrote rather than a
+ * pre-write snapshot the Blob is still serving. Falls back to readStore() when
+ * this instance has not written, which is every dashboard render.
  */
 async function readStoreFresh(): Promise<DataStore> {
+  if (cache?.written) {
+    const own = readCache(OWN_WRITE_TRUST_MS);
+    if (own) return own;
+  }
   return readStore();
 }
 
